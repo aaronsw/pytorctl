@@ -2,14 +2,18 @@
 
 import struct
 import socket
-import GeoIP
 import TorCtl
 
 from TorUtil import plog
+try:
+  import GeoIP
+  # GeoIP data object: choose database here
+  geoip = GeoIP.new(GeoIP.GEOIP_STANDARD)
+  #geoip = GeoIP.open("./GeoLiteCity.dat", GeoIP.GEOIP_STANDARD)
+except:
+  plog("NOTICE", "No GeoIP library. GeoIPSupport.py will not work correctly")
+  # XXX: How do we bail entirely..  
 
-# GeoIP data object: choose database here
-geoip = GeoIP.new(GeoIP.GEOIP_STANDARD)
-#geoip = GeoIP.open("./GeoLiteCity.dat", GeoIP.GEOIP_STANDARD)
 
 class Continent:
   """ Continent class: The group attribute is to partition the continents
