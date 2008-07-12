@@ -772,7 +772,7 @@ class Connection:
               %(circid, reason, "".join(flags)))
 
   def post_descriptor(self, desc):
-    self.sendAndRecv("+POSTDESCRIPTOR\r\n%s"%escape_dots(desc))
+    self.sendAndRecv("+POSTDESCRIPTOR purpose=controller\r\n%s"%escape_dots(desc))
 
 def parse_ns_body(data):
   """Parse the body of an NS event or command into a list of
