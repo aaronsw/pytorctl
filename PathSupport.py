@@ -927,6 +927,7 @@ class Stream:
 
 # TODO: Make passive "PathWatcher" so people can get aggregate 
 # node reliability stats for normal usage without us attaching streams
+# Can use __metaclass__ and type
 
 class PathBuilder(TorCtl.EventHandler):
   """

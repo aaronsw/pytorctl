@@ -184,12 +184,12 @@ class BandwidthStats:
     self.dev = self._dev()
 
 
-
 class StatsRouter(TorCtl.Router):
   "Extended Router to handle statistics markup"
   def __init__(self, router): # Promotion constructor :)
     """'Promotion Constructor' that converts a Router directly into a 
     StatsRouter without a copy."""
+    # TODO: Use __metaclass__ and type to do this instead?
     self.__dict__ = router.__dict__
     self.reset()
   
@@ -333,7 +333,7 @@ class StatsRouter(TorCtl.Router):
                     +str(per_hour_tot) +" vs "+str(chosen_tot))
 
 
-
+# TODO: Use __metaclass__ and type to make this inheritance flexible?
 class StatsHandler(PathSupport.PathBuilder):
   """An extension of PathSupport.PathBuilder that keeps track of 
      router statistics for every circuit and stream"""
