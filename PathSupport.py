@@ -1148,13 +1148,14 @@ class PathBuilder(TorCtl.EventHandler):
     if s.status == "NEW" or s.status == "NEWRESOLVE":
       if s.status == "NEWRESOLVE" and not s.target_port:
         s.target_port = self.resolve_port
-      self.streams[s.strm_id] = Stream(s.strm_id, s.target_host, s.target_port, s.status)
+      if s.circ_id == 0:
+        self.streams[s.strm_id] = Stream(s.strm_id, s.target_host, s.target_port, s.status)
       # Remember Tor-handled streams (Currently only directory streams)
       if s.purpose and s.purpose.find("DIR_") == 0:
         self.streams[s.strm_id].ignored = True
         plog("DEBUG", "Ignoring stream: " + str(s.strm_id))
         return
-      else:
+      elif s.circ_id == 0:
         self.attach_stream_any(self.streams[s.strm_id],
                    self.streams[s.strm_id].detached_from)
     elif s.status == "DETACHED":
@@ -1458,14 +1459,15 @@ class StreamHandler(CircuitHandler):
       if s.status == "NEWRESOLVE" and not s.target_port:
         s.target_port = self.resolve_port      
       # Set up the new stream
-      stream = Stream(s.strm_id, s.target_host, s.target_port, s.status)
-
-      self.streams[s.strm_id] = stream
+      if s.circ_id == 0:
+        stream = Stream(s.strm_id, s.target_host, s.target_port, s.status)
+        self.streams[s.strm_id] = stream
+      
       if s.purpose and s.purpose.find("DIR_") == 0:
         stream.ignored = True
         plog("DEBUG", "Ignoring stream: " + str(s.strm_id))
         return
-      else:
+      elif s.circ_id == 0:
         self.attach_stream_any(self.streams[s.strm_id], self.streams[s.strm_id].detached_from)
     
     # DETACHED
