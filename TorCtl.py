@@ -845,7 +845,7 @@ class EventHandler:
       event = CircuitEvent(evtype, ident, status, path, reason, remote)
     elif evtype == "STREAM":
       #plog("DEBUG", "STREAM: "+body)
-      m = re.match(r"(\S+)\s+(\S+)\s+(\S+)\s+(\S+):(\d+)(\sREASON=\S+)?(\sREMOTE_REASON=\S+)?(\sSOURCE=\S+)?(\sSOURCE_ADDR=\S+)?(\sPURPOSE=\S+)?", body)
+      m = re.match(r"(\S+)\s+(\S+)\s+(\S+)\s+(\S+):(\d+)(\sREASON=\S+)?(\sREMOTE_REASON=\S+)?(\sSOURCE=\S+)?(\sSOURCE_ADDR=\S+)?(\s+PURPOSE=\S+)?", body)
       if not m:
         raise ProtocolError("STREAM event misformatted.")
       ident,status,circ,target_host,target_port,reason,remote,source,source_addr,purpose = m.groups()
@@ -854,7 +854,9 @@ class EventHandler:
       if remote: remote = remote[15:]
       if source: source = source[8:]
       if source_addr: source_addr = source_addr[13:]
-      if purpose: purpose = purpose[9:]
+      if purpose:
+        purpose = purpose.lstrip()
+        purpose = purpose[8:]
       event = StreamEvent(evtype, ident, status, circ, target_host,
                int(target_port), reason, remote, source, source_addr, purpose)
     elif evtype == "ORCONN":
