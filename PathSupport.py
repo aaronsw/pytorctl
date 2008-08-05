@@ -67,6 +67,10 @@ __all__ = ["NodeRestrictionList", "PathRestrictionList",
 
 #################### Path Support Interfaces #####################
 
+class RestrictionError(Exception):
+  "Error raised for issues with applying restrictions"
+  pass
+
 class NodeRestriction:
   "Interface for node restriction policies"
   def r_is_ok(self, r):
@@ -140,6 +144,7 @@ class NodeGenerator:
   def reset_restriction(self, rstr_list):
     "Reset the restriction list to a new list"
     self.rstr_list = rstr_list
+    self.rewind()
 
   def rewind(self):
     "Rewind the generator to the 'beginning'"
@@ -147,6 +152,9 @@ class NodeGenerator:
     # during selection, and also some memory overhead (at the cost
     # of a much slower rewind() though..)
     self.routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
+    if not self.routers:
+      plog("ERROR", "No routers left after restrictions applied!")
+      raise RestrictionError()
     #self.routers = copy.copy(self.sorted_r)
 
   def mark_chosen(self, r):
@@ -512,6 +520,7 @@ class OrderedExitGenerator(NodeGenerator):
     NodeGenerator.__init__(self, sorted_r, rstr_list)
 
   def rewind(self):
+    NodeGenerator.rewind(self)
     if self.to_port not in self.next_exit_by_port or not self.next_exit_by_port[self.to_port]:
       self.next_exit_by_port[self.to_port] = 0
       self.last_idx = len(self.sorted_r)
@@ -745,6 +754,7 @@ class SelectionManager:
   def reconfigure(self, sorted_r):
     """This function is called after a configuration change, 
      to rebuild the RestrictionLists."""
+    plog("DEBUG", "Reconfigure")
     if self.use_all_exits:
       self.path_rstr = PathRestrictionList([UniqueRestriction()])
     else:
@@ -775,7 +785,14 @@ class SelectionManager:
        FlagsRestriction(["Running","Fast"], [])]
 
     )
-    if self.use_all_exits:
+
+    if self.exit_name:
+      plog("DEBUG", "Applying Setexit: "+self.exit_name)
+      if self.exit_name[0] == '$':
+        self.exit_rstr = NodeRestrictionList([IdHexRestriction(self.exit_name)])
+      else:
+        self.exit_rstr = NodeRestrictionList([NickRestriction(self.exit_name)])
+    elif self.use_all_exits:
       self.exit_rstr = NodeRestrictionList(
         [FlagsRestriction(["Valid", "Running","Fast"], ["BadExit"])])
     else:
@@ -783,13 +800,6 @@ class SelectionManager:
         [PercentileRestriction(nonentry_skip, nonentry_fast, sorted_r),
          FlagsRestriction(["Valid", "Running","Fast"], ["BadExit"])])
 
-    if self.exit_name:
-      self.exit_rstr.del_restriction(IdHexRestriction)
-      self.exit_rstr.del_restriction(NickRestriction)
-      if self.exit_name[0] == '$':
-        self.exit_rstr.add_restriction(IdHexRestriction(self.exit_name))
-      else:
-        self.exit_rstr.add_restriction(NickRestriction(self.exit_name))
 
     # GeoIP configuration
     if self.geoip_config:
@@ -840,11 +850,8 @@ class SelectionManager:
         exitgen = self.__ordered_exit_gen = \
           OrderedExitGenerator(80, sorted_r, self.exit_rstr)
     elif self.uniform:
-      # 'real' exits should also be chosen when not using 'order_exits'
-      self.exit_rstr.add_restriction(ExitPolicyRestriction("255.255.255.255", 80))
       exitgen = UniformGenerator(sorted_r, self.exit_rstr)
     else:
-      self.exit_rstr.add_restriction(ExitPolicyRestriction("255.255.255.255", 80))
       exitgen = BwWeightedGenerator(sorted_r, self.exit_rstr, self.pathlen, exit=True)
 
     if self.uniform:
