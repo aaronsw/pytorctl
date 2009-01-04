@@ -25,11 +25,12 @@ __all__ = ["Enum", "Enum2", "Callable", "sort_list", "quote", "escape_dots", "un
 tor_port = 9050
 tor_host = '127.0.0.1'
 
-meta_port = 9052
-meta_host = '127.0.0.1'
-
 control_port = 9051
 control_host = '127.0.0.1'
+control_pass = ""
+
+meta_port = 9052
+meta_host = '127.0.0.1'
 
 class Enum:
   """ Defines an ordered dense name-to-number 1-1 mapping """
