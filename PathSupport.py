@@ -900,7 +900,7 @@ class Circuit:
     self.built = False
     self.failed = False
     self.dirty = False
-    self.closed = False
+    self.requested_closed = False
     self.detached_cnt = 0
     self.last_extended_at = time.time()
     self.extend_times = []      # List of all extend-durations
@@ -1055,6 +1055,21 @@ class PathBuilder(TorCtl.EventHandler):
         e.g. for generating paths without actually creating any circuits """
     return self.selmgr.path_selector.build_path(self.selmgr.pathlen)
 
+  def close_all_circuits(self):
+    """ Close all open circuits """
+    for circ in self.circuits.itervalues():
+      self.close_circuit(circ.circ_id)
+
+  def close_circuit(self, id):
+    """ Close a circuit with given id """
+    # TODO: Pass streams to another circ before closing?
+    plog("DEBUG", "Requesting close of circuit id: "+str(id))
+    if self.circuits[id].requested_closed: return
+    self.circuits[id].requested_closed = True
+    try: self.c.close_circuit(id)
+    except TorCtl.ErrorReply, e: 
+      plog("ERROR", "Failed closing circuit " + str(id) + ": " + str(e))
+
   def attach_stream_any(self, stream, badcircs):
     "Attach a stream to a valid circuit, avoiding any in 'badcircs'"
     # Newnym, and warn if not built plus pending
@@ -1074,7 +1089,8 @@ class PathBuilder(TorCtl.EventHandler):
         self.circuits[key].dirty = True
       
     for circ in self.circuits.itervalues():
-      if circ.built and not circ.dirty and circ.circ_id not in badcircs:
+      if circ.built and not circ.requested_closed and not circ.dirty \
+          and circ.circ_id not in badcircs:
         if circ.exit.will_exit_to(stream.host, stream.port):
           try:
             self.c.attach_stream(stream.strm_id, circ.circ_id)
@@ -1303,14 +1319,6 @@ class CircuitHandler(PathBuilder):
         # we have gotten an NS event to notify us they disappeared?
         plog("NOTICE", "Error building circuit: " + str(e.args))
 
-  def close_circuit(self, id):
-    """ Close a circuit with given id """
-    # TODO: Pass streams to another circ before closing?
-    self.circuits[id].closed = True
-    try: self.c.close_circuit(id)
-    except TorCtl.ErrorReply, e: 
-      plog("ERROR", "Failed closing circuit " + str(id) + ": " + str(e))
-
   def circ_status_event(self, c):
     """ Handle circuit status events """
     output = [c.event_name, str(c.circ_id), c.status]
@@ -1425,7 +1433,8 @@ class StreamHandler(CircuitHandler):
     else: list = self.circuits.values()
     for circ in list:
       # Check each circuit
-      if circ.built and not circ.closed and circ.circ_id not in badcircs and not circ.dirty:
+      if circ.built and not circ.requested_closed and circ.circ_id not in badcircs \
+         and not circ.dirty:
         if circ.exit.will_exit_to(stream.host, stream.port):
           try:
             self.c.attach_stream(stream.strm_id, circ.circ_id)

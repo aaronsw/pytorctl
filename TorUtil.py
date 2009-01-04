@@ -22,10 +22,10 @@ __all__ = ["Enum", "Enum2", "Callable", "sort_list", "quote", "escape_dots", "un
 
 # TODO: Make functions to read these from a config file. This isn't
 # the right place for them either.. But at least it's unified.
-tor_port = 9050
+tor_port = 9060
 tor_host = '127.0.0.1'
 
-control_port = 9051
+control_port = 9061
 control_host = '127.0.0.1'
 control_pass = ""
 

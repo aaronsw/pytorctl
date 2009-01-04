@@ -495,6 +495,12 @@ class StatsHandler(PathSupport.PathBuilder):
     self.failed_reasons.clear()
     for r in self.sorted_r: r.reset()
 
+  def close_circuit(self, id):
+    PathSupport.PathBuilder.close_circuit(self, id)
+    for r in self.circuits[id].path:
+      r.circ_chosen += 1
+      r.circ_succeeded += 1
+
   def circ_status_event(self, c):
     if c.circ_id in self.circuits:
       # TODO: Hrmm, consider making this sane in TorCtl.
@@ -545,19 +551,21 @@ class StatsHandler(PathSupport.PathBuilder):
           self.suspect_reasons[reason].add_r(r)
       elif c.status == "CLOSED":
         # Since PathBuilder deletes the circuit on a failed, 
-        # we only get this for a clean close
-        for r in self.circuits[c.circ_id].path:
-          r.circ_chosen += 1
-          if lreason in ("REQUESTED", "FINISHED", "ORIGIN"):
-            r.circ_succeeded += 1
-          else:
-            if not reason in r.reason_suspected:
-              r.reason_suspected[reason] = 1
-            else: r.reason_suspected[reason] += 1
-            r.circ_suspected+= 1
-            if reason not in self.suspect_reasons:
-              self.suspect_reasons[reason] = SuspectRouterList(reason)
-            self.suspect_reasons[reason].add_r(r)
+        # we only get this for a clean close that was not
+        # requested by us
+        if not self.circuits[c.circ_id].requested_closed:
+          for r in self.circuits[c.circ_id].path:
+            r.circ_chosen += 1
+            if lreason in ("REQUESTED", "FINISHED", "ORIGIN"):
+              r.circ_succeeded += 1
+            else:
+              if not reason in r.reason_suspected:
+                r.reason_suspected[reason] = 1
+              else: r.reason_suspected[reason] += 1
+              r.circ_suspected+= 1
+              if reason not in self.suspect_reasons:
+                self.suspect_reasons[reason] = SuspectRouterList(reason)
+              self.suspect_reasons[reason].add_r(r)
     PathBuilder.circ_status_event(self, c)
 
   def count_stream_reason_failed(self, s, reason):
