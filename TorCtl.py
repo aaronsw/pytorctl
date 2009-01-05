@@ -102,13 +102,14 @@ class NewDescEvent:
     self.idlist = idlist
 
 class CircuitEvent:
-  def __init__(self, event_name, circ_id, status, path, reason,
-         remote_reason):
+  def __init__(self, event_name, circ_id, status, path, purpose,
+         reason, remote_reason):
     self.event_name = event_name
     self.arrived_at = 0
     self.circ_id = circ_id
     self.status = status
     self.path = path
+    self.purpose = purpose
     self.reason = reason
     self.remote_reason = remote_reason
 
@@ -826,23 +827,36 @@ class EventHandler:
       evtype,body = body,""
     evtype = evtype.upper()
     if evtype == "CIRC":
-      m = re.match(r"(\d+)\s+(\S+)(\s\S+)?(\s\S+)?(\s\S+)?", body)
+      m = re.match(r"(\d+)\s+(\S+)(\s\S+)?(\s\S+)?(\s\S+)?(\s\S+)?", body)
       if not m:
         raise ProtocolError("CIRC event misformatted.")
-      ident,status,path,reason,remote = m.groups()
+      ident,status,path,purpose,reason,remote = m.groups()
       ident = int(ident)
       if path:
-        if "REASON=" in path:
+        if "PURPOSE=" in path:
+          remote = reason
+          reason = purpose
+          purpose=path
+          path=[]
+        elif "REASON=" in path:
           remote = reason
           reason = path
+          purpose = ""
           path=[]
         else:
           path = path.strip().split(",")
       else:
         path = []
+
+      if purpose and "REASON=" in purpose:
+        remote=reason
+        reason=purpose
+        purpose=""
+
+      if purpose: purpose = purpose[9:]
       if reason: reason = reason[8:]
       if remote: remote = remote[15:]
-      event = CircuitEvent(evtype, ident, status, path, reason, remote)
+      event = CircuitEvent(evtype, ident, status, path, purpose, reason, remote)
     elif evtype == "STREAM":
       #plog("DEBUG", "STREAM: "+body)
       m = re.match(r"(\S+)\s+(\S+)\s+(\S+)\s+(\S+):(\d+)(\sREASON=\S+)?(\sREMOTE_REASON=\S+)?(\sSOURCE=\S+)?(\sSOURCE_ADDR=\S+)?(\s+PURPOSE=\S+)?", body)
