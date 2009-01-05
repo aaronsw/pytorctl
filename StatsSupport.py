@@ -343,6 +343,7 @@ class StatsHandler(PathSupport.PathBuilder):
     self.strm_count = 0
     self.strm_failed = 0
     self.circ_failed = 0
+    self.circ_succeeded = 0
     self.failed_reasons = {}
     self.suspect_reasons = {}
 
@@ -490,6 +491,7 @@ class StatsHandler(PathSupport.PathBuilder):
     self.circ_count = 0
     self.strm_count = 0
     self.strm_failed = 0
+    self.circ_succeeded = 0
     self.circ_failed = 0
     self.suspect_reasons.clear()
     self.failed_reasons.clear()
@@ -497,6 +499,9 @@ class StatsHandler(PathSupport.PathBuilder):
 
   def close_circuit(self, id):
     PathSupport.PathBuilder.close_circuit(self, id)
+    # Shortcut so we don't have to wait for the CLOSE
+    # events for stats update.
+    self.circ_succeeded += 1
     for r in self.circuits[id].path:
       r.circ_chosen += 1
       r.circ_succeeded += 1
@@ -554,6 +559,7 @@ class StatsHandler(PathSupport.PathBuilder):
         # we only get this for a clean close that was not
         # requested by us
         if not self.circuits[c.circ_id].requested_closed:
+          self.circ_succeeded += 1
           for r in self.circuits[c.circ_id].path:
             r.circ_chosen += 1
             if lreason in ("REQUESTED", "FINISHED", "ORIGIN"):
