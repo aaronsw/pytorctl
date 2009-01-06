@@ -446,7 +446,7 @@ class Connection:
         plog("DEBUG", "Ignoring incompatible syntactic sugar: 650 OK")
         continue
       if reply == "CLOSE":
-        plog("INFO", "Event loop recieved close message.")
+        plog("INFO", "Event loop received close message.")
         return
       try:
         self._handleFn(timestamp, reply)
@@ -930,7 +930,7 @@ class EventHandler:
     return event
 
   def heartbeat_event(self, event):
-    """Called before any event is recieved. Convenience function
+    """Called before any event is received. Convenience function
        for any cleanup/setup/reconfiguration you may need to do.
     """
     pass
