@@ -366,6 +366,8 @@ class Connection:
     try:
       self._queue.put("CLOSE")
       self._eventQueue.put((time.time(), "CLOSE"))
+      self._closed = 1
+      self._s.close()
     finally:
       self._sendLock.release()
 
@@ -392,8 +394,11 @@ class Connection:
       try:
         isEvent, reply = self._read_reply()
       except:
-        self._err(sys.exc_info())
-        return
+        if not self._closed:
+          self._err(sys.exc_info())
+          return
+        else:
+		  isEvent = 0
 
       if isEvent:
         if self._handler is not None:
@@ -401,9 +406,8 @@ class Connection:
       else:
         cb = self._queue.get() # atomic..
         if cb == "CLOSE":
-          self._s.close()
           self._s = None
-          self._closed = 1
+          plog("INFO", "Closed control connection. Exiting thread.")
           return
         else:
           cb(reply)
@@ -442,6 +446,7 @@ class Connection:
         plog("DEBUG", "Ignoring incompatible syntactic sugar: 650 OK")
         continue
       if reply == "CLOSE":
+        plog("INFO", "Event loop recieved close message.")
         return
       try:
         self._handleFn(timestamp, reply)
