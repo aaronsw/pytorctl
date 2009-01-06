@@ -278,7 +278,7 @@ class Router:
       pl = re.search(r"^platform Tor (\S+).*on (\S+)", line)
       ac = re.search(r"^accept (\S+):([^-]+)(?:-(\d+))?", line)
       rj = re.search(r"^reject (\S+):([^-]+)(?:-(\d+))?", line)
-      bw = re.search(r"^bandwidth \d+ \d+ (\d+)", line)
+      bw = re.search(r"^bandwidth (\d+) \d+ (\d+)", line)
       up = re.search(r"^uptime (\d+)", line)
       if re.search(r"^opt hibernating 1", line):
         #dead = 1 # XXX: Technically this may be stale..
@@ -289,7 +289,7 @@ class Router:
       elif rj:
         exitpolicy.append(ExitPolicyLine(False, *rj.groups()))
       elif bw:
-        bw_observed = int(bw.group(1))
+        bw_observed = min(map(int, bw.groups()))
       elif pl:
         version, os = pl.groups()
       elif up:
