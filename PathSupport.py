@@ -148,9 +148,9 @@ class NodeGenerator:
 
   def rewind(self):
     "Rewind the generator to the 'beginning'"
-    # FIXME: If we apply the restrictions now, we can save cycles
-    # during selection, and also some memory overhead (at the cost
-    # of a much slower rewind() though..)
+    # If we apply the restrictions now, we can save cycles during 
+    # selection, and also some memory overhead (at the cost of a much 
+    # slower rewind() though..)
     self.routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
     if not self.routers:
       plog("ERROR", "No routers left after restrictions applied!")
@@ -508,8 +508,8 @@ class UniformGenerator(NodeGenerator):
   """NodeGenerator that produces nodes in the uniform distribution"""
   def generate(self):
     while not self.all_chosen():
-      r = random.choice(self.routers)
-      if self.rstr_list.r_is_ok(r): yield r
+      yield random.choice(self.routers)
+     
 
 class OrderedExitGenerator(NodeGenerator):
   """NodeGenerator that produces exits in an ordered fashion for a 
@@ -523,7 +523,7 @@ class OrderedExitGenerator(NodeGenerator):
     NodeGenerator.rewind(self)
     if self.to_port not in self.next_exit_by_port or not self.next_exit_by_port[self.to_port]:
       self.next_exit_by_port[self.to_port] = 0
-      self.last_idx = len(self.sorted_r)
+      self.last_idx = len(self.routers)
     else:
       self.last_idx = self.next_exit_by_port[self.to_port]
 
@@ -539,11 +539,10 @@ class OrderedExitGenerator(NodeGenerator):
 
   def generate(self):
     while True: # A do..while would be real nice here..
-      if self.next_exit_by_port[self.to_port] >= len(self.sorted_r):
+      if self.next_exit_by_port[self.to_port] >= len(self.routers):
         self.next_exit_by_port[self.to_port] = 0
-      r = self.sorted_r[self.next_exit_by_port[self.to_port]]
-      if self.rstr_list.r_is_ok(r): yield r
-      else: self.next_exit_by_port[self.to_port] += 1
+      yield self.routers[self.next_exit_by_port[self.to_port]]
+      self.next_exit_by_port[self.to_port] += 1
       if self.last_idx == self.next_exit_by_port[self.to_port]:
         break
 
@@ -586,15 +585,13 @@ class BwWeightedGenerator(NodeGenerator):
     self.total_exit_bw = 0
     self.total_guard_bw = 0
     self.total_bw = 0
-    for r in self.sorted_r:
-      # Should this be outside the restriction checks?
+    for r in self.routers:
       # TODO: Check max_bandwidth and cap...
-      if self.rstr_list.r_is_ok(r):
-        self.total_bw += r.bw
-        if "Exit" in r.flags:
-          self.total_exit_bw += r.bw
-        if "Guard" in r.flags:
-          self.total_guard_bw += r.bw
+      self.total_bw += r.bw
+      if "Exit" in r.flags:
+        self.total_exit_bw += r.bw
+      if "Guard" in r.flags:
+        self.total_guard_bw += r.bw
 
     bw_per_hop = (1.0*self.total_bw)/self.pathlen
 
@@ -656,17 +653,16 @@ class BwWeightedGenerator(NodeGenerator):
       for r in self.routers:
         # Below zero here means next() -> choose a new random int+router 
         if i < 0: break
-        if self.rstr_list.r_is_ok(r):
-          bw = r.bw
-          if "Exit" in r.flags:
-            bw *= self.exit_weight
-          if "Guard" in r.flags:
-            bw *= self.guard_weight
+        bw = r.bw
+        if "Exit" in r.flags:
+          bw *= self.exit_weight
+        if "Guard" in r.flags:
+          bw *= self.guard_weight
 
-          i -= bw
-          if i < 0:
-            plog("DEBUG", "Chosen router with a bandwidth of: " + str(r.bw))
-            yield r
+        i -= bw
+        if i < 0:
+          plog("DEBUG", "Chosen router with a bandwidth of: " + str(r.bw))
+          yield r
 
 ####################### Secret Sauce ###########################
 
@@ -692,6 +688,8 @@ class PathSelector:
   def build_path(self, pathlen):
     """Creates a path of 'pathlen' hops, and returns it as a list of
        Router instances"""
+    # FIXME: rewinding every path build is too expensive..
+    # We should only rewind when the router list changes.
     self.entry_gen.rewind()
     self.mid_gen.rewind()
     self.exit_gen.rewind()
@@ -1645,7 +1643,7 @@ def do_unit(rst, r_list, plamb):
 
 if __name__ == '__main__':
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  s.connect(("127.0.0.1",9051))
+  s.connect(("127.0.0.1",9061))
   c = Connection(s)
   c.debug(file("control.log", "w"))
   c.authenticate()
@@ -1663,6 +1661,7 @@ if __name__ == '__main__':
       bw *= bwgen.guard_weight
     return bw
 
+  # XXX: Test Uniform and OrderedexitGenerators
   do_gen_unit(BwWeightedGenerator(sorted_rlist, FlagsRestriction(["Exit"]),
                                   3, exit=True),
               sorted_rlist, flag_weighting, 500)
