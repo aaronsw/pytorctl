@@ -140,11 +140,13 @@ class NodeGenerator:
     self.rstr_list = rstr_list # Check me before you yield!
     self.sorted_r = sorted_r
     self.rewind()
+    self.rebuild()
 
   def reset_restriction(self, rstr_list):
     "Reset the restriction list to a new list"
     self.rstr_list = rstr_list
     self.rewind()
+    self.rebuild()
 
   def rewind(self):
     "Rewind the generator to the 'beginning'"
@@ -155,7 +157,11 @@ class NodeGenerator:
     if not self.routers:
       plog("ERROR", "No routers left after restrictions applied!")
       raise RestrictionError()
-    #self.routers = copy.copy(self.sorted_r)
+ 
+  def rebuild(self):
+    """ Extra step to be performed when new routers are added or when
+    the restrictions change. Only needed by some generators. """
+    pass
 
   def mark_chosen(self, r):
     """Mark a router as chosen: remove it from the list of routers 
@@ -578,7 +584,7 @@ class BwWeightedGenerator(NodeGenerator):
     self.pathlen = pathlen
     NodeGenerator.__init__(self, sorted_r, rstr_list)
 
-  def rewind(self):
+  def rebuild(self):
     NodeGenerator.rewind(self)
     # Set the exit_weight
     # We are choosing a non-exit
@@ -631,7 +637,7 @@ class BwWeightedGenerator(NodeGenerator):
           self.guard_weight = ((self.total_guard_bw-bw_per_hop)/self.total_guard_bw)
         else: self.guard_weight = 0
     
-    for r in self.sorted_r:
+    for r in self.routers:
       bw = r.bw
       if "Exit" in r.flags:
         bw *= self.exit_weight
@@ -688,8 +694,6 @@ class PathSelector:
   def build_path(self, pathlen):
     """Creates a path of 'pathlen' hops, and returns it as a list of
        Router instances"""
-    # FIXME: rewinding every path build is too expensive..
-    # We should only rewind when the router list changes.
     self.entry_gen.rewind()
     self.mid_gen.rewind()
     self.exit_gen.rewind()
@@ -888,6 +892,8 @@ class SelectionManager:
         if self.geoip_config.exit_country:
           self.exit_rstr.del_restriction(CountryRestriction) 
           self.exit_rstr.add_restriction(CountryRestriction(self.geoip_config.exit_country))
+    # Need to rebuild exit generator
+    self.path_selector.exit_gen.rebuild()
 
 class Circuit:
   "Class to describe a circuit"
@@ -1257,15 +1263,23 @@ class PathBuilder(TorCtl.EventHandler):
     else:
       self.streams[s.strm_id].bytes_read += s.bytes_read
       self.streams[s.strm_id].bytes_written += s.bytes_written
- 
+
   def ns_event(self, n):
     self.read_routers(n.nslist)
+    # FIXME: Hrmm.. this is poor encapsulation..
+    self.selmgr.path_selector.entry_gen.rebuild()
+    self.selmgr.path_selector.mid_gen.rebuild()
+    self.selmgr.path_selector.exit_gen.rebuild()
     plog("DEBUG", "Read " + str(len(n.nslist))+" NS => " 
        + str(len(self.sorted_r)) + " routers")
   
   def new_desc_event(self, d):
     for i in d.idlist: # Is this too slow?
       self.read_routers(self.c.get_network_status("id/"+i))
+    # FIXME: Hrmm.. this is poor encapsulation..
+    self.selmgr.path_selector.entry_gen.rebuild()
+    self.selmgr.path_selector.mid_gen.rebuild()
+    self.selmgr.path_selector.exit_gen.rebuild()
     plog("DEBUG", "Read " + str(len(d.idlist))+" Desc => " 
        + str(len(self.sorted_r)) + " routers")
 
@@ -1643,10 +1657,10 @@ def do_unit(rst, r_list, plamb):
 
 if __name__ == '__main__':
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  s.connect(("127.0.0.1",9061))
+  s.connect((TorUtil.control_host,TorUtil.control_port))
   c = Connection(s)
   c.debug(file("control.log", "w"))
-  c.authenticate()
+  c.authenticate(TorUtil.control_pass)
   nslist = c.get_network_status()
   sorted_rlist = c.read_routers(c.get_network_status())
 
