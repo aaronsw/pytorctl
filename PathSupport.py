@@ -1088,7 +1088,7 @@ class PathBuilder(TorCtl.EventHandler):
              +" with "+str(len(self.circuits[key].pending_streams))
              +" pending streams")
           unattached_streams.extend(self.circuits[key].pending_streams)
-          self.circuits[key].pending_streams.clear()
+          self.circuits[key].pending_streams = []
         # FIXME: Consider actually closing circ if no streams.
         self.circuits[key].dirty = True
       
