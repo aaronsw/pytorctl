@@ -749,7 +749,6 @@ class SelectionManager:
     self.exit_name = use_exit
     self.use_guards = use_guards
     self.geoip_config = geoip_config
-
     self.restrict_guards_only = restrict_guards
 
   def reconfigure(self, sorted_r):
@@ -764,14 +763,11 @@ class SelectionManager:
   
     if self.use_guards: entry_flags = ["Guard", "Valid", "Running"]
     else: entry_flags = ["Valid", "Running"]
-     
 
     if self.restrict_guards_only:
-      entry_flags = ["Guard","Valid","Running"]
       nonentry_skip = 0
       nonentry_fast = 100
     else:
-      entry_flags = ["Valid","Running"]
       nonentry_skip = self.percent_skip
       nonentry_fast = self.percent_fast
 
