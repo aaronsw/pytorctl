@@ -139,29 +139,27 @@ class NodeGenerator:
     and a NodeRestrictionList 'rstr_list'"""
     self.rstr_list = rstr_list # Check me before you yield!
     self.sorted_r = sorted_r
-    self.rewind()
     self.rebuild()
 
   def reset_restriction(self, rstr_list):
     "Reset the restriction list to a new list"
     self.rstr_list = rstr_list
-    self.rewind()
     self.rebuild()
 
   def rewind(self):
     "Rewind the generator to the 'beginning'"
-    # If we apply the restrictions now, we can save cycles during 
-    # selection, and also some memory overhead (at the cost of a much 
-    # slower rewind() though..)
-    self.routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
+    self.routers = copy.copy(self.rstr_routers)
     if not self.routers:
       plog("ERROR", "No routers left after restrictions applied!")
       raise RestrictionError()
  
   def rebuild(self):
     """ Extra step to be performed when new routers are added or when
-    the restrictions change. Only needed by some generators. """
-    pass
+    the restrictions change. """
+    self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
+    if not self.rstr_routers:
+      plog("ERROR", "No routers left after restrictions applied!")
+      raise RestrictionError()
 
   def mark_chosen(self, r):
     """Mark a router as chosen: remove it from the list of routers 
@@ -585,6 +583,7 @@ class BwWeightedGenerator(NodeGenerator):
     NodeGenerator.__init__(self, sorted_r, rstr_list)
 
   def rebuild(self):
+    NodeGenerator.rebuild(self)
     NodeGenerator.rewind(self)
     # Set the exit_weight
     # We are choosing a non-exit
@@ -1191,6 +1190,7 @@ class PathBuilder(TorCtl.EventHandler):
         self.streams[s.strm_id] = Stream(s.strm_id, s.target_host,
                       s.target_port, "NEW")
       # FIXME Stats (differentiate Resolved streams also..)
+      # XXX: This can happen for timeouts
       if not s.circ_id:
         plog("WARN", "Stream "+str(s.strm_id)+" detached from no circuit!")
       else:
@@ -1227,6 +1227,7 @@ class PathBuilder(TorCtl.EventHandler):
         plog("NOTICE", "Failed stream "+str(s.strm_id)+" not found")
         return
 
+      # XXX: Can happen on timeout
       if not s.circ_id:
         plog("WARN", "Stream "+str(s.strm_id)+" failed from no circuit!")
 
