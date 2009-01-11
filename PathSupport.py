@@ -1030,6 +1030,15 @@ class PathBuilder(TorCtl.EventHandler):
       delay_job(self)
 
   def read_routers(self, nslist):
+    for ns in nslist:
+      if not "Running" in ns.flags:
+        if ns.idhex in self.routers:
+          plog("DEBUG", "Expiring non-running router "+r.idhex)
+          self.sorted_r.remove(elf.routers[ns.idhex])
+          del self.routers[ns.idhex]
+
+    nslist = filter(lambda ns: "Running" in ns.flags, nslist)
+  
     routers = self.c.read_routers(nslist)
     new_routers = []
     for r in routers:
