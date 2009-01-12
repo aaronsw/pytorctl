@@ -1034,7 +1034,7 @@ class PathBuilder(TorCtl.EventHandler):
       if not "Running" in ns.flags:
         if ns.idhex in self.routers:
           plog("DEBUG", "Expiring non-running router "+ns.idhex)
-          self.sorted_r.remove(elf.routers[ns.idhex])
+          self.sorted_r.remove(self.routers[ns.idhex])
           del self.routers[ns.idhex]
 
     nslist = filter(lambda ns: "Running" in ns.flags, nslist)
@@ -1630,7 +1630,7 @@ def do_gen_unit(gen, r_list, weight_bw, num_print):
       flag += "E"
     if "Guard" in r.flags:
       flag += "G"
-    print str(r.list_rank)+". "+r.nickname+" "+str(r.bw/1024)+"/"+str(bw/1024)+": "+str(r.chosen)+", "+flag
+    print str(r.list_rank)+". "+r.nickname+" "+str(r.bw/1024.0)+"/"+str(bw/1024.0)+": "+str(r.chosen)+", "+flag
     i += 1
     if i > num_print: break
 
