@@ -192,15 +192,15 @@ class Connection(TorCtl.Connection):
 #  - NodeRestrictions:
 #    - Uptime/LongLivedPorts (Does/should hibernation count?)
 #    - Published/Updated
+#    - Add a /8 restriction for ExitPolicy?
 #  - PathRestrictions:
-#    - Family
+#    - NodeFamily
 #    - GeoIP:
-#      - OceanPhobicRestrictor (avoids Pacific Ocean or two atlantic crossings)
-#        or ContinentRestrictor (avoids doing more than N continent crossings)
-#        - Mathematical/empirical study of predecessor expectation
-#          - If middle node on the same continent as exit, exit learns nothing
-#          - else, exit has a bias on the continent of origin of user
-#            - Language and browser accept string determine this anyway
+#      - Mathematical/empirical study of predecessor expectation
+#        - If middle node on the same continent as exit, exit learns nothing
+#        - else, exit has a bias on the continent of origin of user
+#          - Language and browser accept string determine this anyway
+#      - ContinentRestrictor (avoids doing more than N continent crossings)
 #      - EchelonPhobicRestrictor
 #        - Does not cross international boundaries for client->Entry or
 #          Exit->destination hops
@@ -1033,7 +1033,7 @@ class PathBuilder(TorCtl.EventHandler):
     for ns in nslist:
       if not "Running" in ns.flags:
         if ns.idhex in self.routers:
-          plog("DEBUG", "Expiring non-running router "+r.idhex)
+          plog("DEBUG", "Expiring non-running router "+ns.idhex)
           self.sorted_r.remove(elf.routers[ns.idhex])
           del self.routers[ns.idhex]
 
