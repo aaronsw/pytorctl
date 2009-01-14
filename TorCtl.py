@@ -209,6 +209,17 @@ class ExitPolicyLine:
         return self.match
     return -1
 
+  def __str__(self):
+    retr = ""
+    if self.match:
+      retr += "accept "
+    else:
+      retr += "reject "
+    retr += socket.inet_ntoa(struct.pack(">I",self.ip)) + "/"
+    retr += socket.inet_ntoa(struct.pack(">I",self.netmask)) + ":"
+    retr += str(self.port_low)+"-"+str(self.port_high)
+    return retr
+
 class RouterVersion:
   """ Represents a Router's version. Overloads all comparison operators
       to check for newer, older, or equivalent versions. """
@@ -247,6 +258,8 @@ class Router:
     self.os = os
     self.list_rank = 0 # position in a sorted list of routers.
     self.uptime = uptime
+    self.refcount = 0 # How many open circs are we currently in?
+    self.deleted = False # Has Tor already deleted this descriptor?
 
   def __str__(self):
     s = self.idhex, self.nickname
