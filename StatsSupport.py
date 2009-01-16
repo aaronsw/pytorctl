@@ -192,6 +192,9 @@ class StatsRouter(TorCtl.Router):
     # TODO: Use __metaclass__ and type to do this instead?
     self.__dict__ = router.__dict__
     self.reset()
+    # StatsRouters should not be destroyed when Tor forgets about them
+    # Give them an extra refcount:
+    self.refcount += 1 
   
   def reset(self):
     "Reset all stats on this Router"
@@ -672,6 +675,7 @@ class StatsHandler(PathSupport.PathBuilder):
     PathBuilder.stream_status_event(self, s)
 
   def ns_event(self, n):
+    # XXX: Non-Running routers are stripped here..
     PathBuilder.ns_event(self, n)
     now = n.arrived_at
     for ns in n.nslist:
