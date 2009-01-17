@@ -71,6 +71,10 @@ class RestrictionError(Exception):
   "Error raised for issues with applying restrictions"
   pass
 
+class NoNodesRemain(RestrictionError):
+  "Error raised for issues with applying restrictions"
+  pass
+
 class NodeRestriction:
   "Interface for node restriction policies"
   def r_is_ok(self, r):
@@ -150,7 +154,7 @@ class NodeGenerator:
     self.routers = copy.copy(self.rstr_routers)
     if not self.routers:
       plog("ERROR", "No routers left after restrictions applied!")
-      raise RestrictionError()
+      raise NoNodesRemain()
  
   def rebuild(self, sorted_r=None):
     """ Extra step to be performed when new routers are added or when
@@ -160,7 +164,7 @@ class NodeGenerator:
     self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
     if not self.rstr_routers:
       plog("ERROR", "No routers left after restrictions applied!")
-      raise RestrictionError()
+      raise NoNodesRemain()
 
   def mark_chosen(self, r):
     """Mark a router as chosen: remove it from the list of routers 
