@@ -296,7 +296,7 @@ class Router:
       if re.search(r"^opt hibernating 1", line):
         #dead = 1 # XXX: Technically this may be stale..
         if ("Running" in ns.flags):
-          plog("INFO", "Hibernating router "+ns.nickname+" is running..")
+          plog("INFO", "Hibernating router "+ns.nickname+" is running, flags: "+" ".join(ns.flags))
       if ac:
         exitpolicy.append(ExitPolicyLine(True, *ac.groups()))
       elif rj:
@@ -313,7 +313,7 @@ class Router:
       plog("NOTICE", "Got different names " + ns.nickname + " vs " +
              router + " for " + ns.idhex)
     if not bw_observed and not dead and ("Valid" in ns.flags):
-      plog("INFO", "No bandwidth for live router " + ns.nickname)
+      plog("INFO", "No bandwidth for live router "+ns.nickname+", flags: "+" ".join(ns.flags))
     if not version or not os:
       plog("INFO", "No version and/or OS for router " + ns.nickname)
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
