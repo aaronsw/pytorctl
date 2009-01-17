@@ -340,8 +340,8 @@ class StatsRouter(TorCtl.Router):
 class StatsHandler(PathSupport.PathBuilder):
   """An extension of PathSupport.PathBuilder that keeps track of 
      router statistics for every circuit and stream"""
-  def __init__(self, c, slmgr):
-    PathBuilder.__init__(self, c, slmgr, StatsRouter)
+  def __init__(self, c, slmgr, RouterClass=StatsRouter):
+    PathBuilder.__init__(self, c, slmgr, RouterClass)
     self.circ_count = 0
     self.strm_count = 0
     self.strm_failed = 0
@@ -675,7 +675,6 @@ class StatsHandler(PathSupport.PathBuilder):
     PathBuilder.stream_status_event(self, s)
 
   def ns_event(self, n):
-    # XXX: Non-Running routers are stripped here..
     PathBuilder.ns_event(self, n)
     now = n.arrived_at
     for ns in n.nslist:

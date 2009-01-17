@@ -138,8 +138,7 @@ class NodeGenerator:
     """Constructor. Takes a bandwidth-sorted list of Routers 'sorted_r' 
     and a NodeRestrictionList 'rstr_list'"""
     self.rstr_list = rstr_list # Check me before you yield!
-    self.sorted_r = sorted_r
-    self.rebuild()
+    self.rebuild(sorted_r)
 
   def reset_restriction(self, rstr_list):
     "Reset the restriction list to a new list"
@@ -153,9 +152,11 @@ class NodeGenerator:
       plog("ERROR", "No routers left after restrictions applied!")
       raise RestrictionError()
  
-  def rebuild(self):
+  def rebuild(self, sorted_r=None):
     """ Extra step to be performed when new routers are added or when
     the restrictions change. """
+    if sorted_r:
+      self.sorted_r = sorted_r
     self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
     if not self.rstr_routers:
       plog("ERROR", "No routers left after restrictions applied!")
@@ -576,8 +577,8 @@ class BwWeightedGenerator(NodeGenerator):
     self.pathlen = pathlen
     NodeGenerator.__init__(self, sorted_r, rstr_list)
 
-  def rebuild(self):
-    NodeGenerator.rebuild(self)
+  def rebuild(self, sorted_r=None):
+    NodeGenerator.rebuild(self, sorted_r)
     NodeGenerator.rewind(self)
     # Set the exit_weight
     # We are choosing a non-exit
@@ -683,6 +684,12 @@ class PathSelector:
     self.mid_gen = mid_gen
     self.exit_gen = exit_gen
     self.path_restrict = path_restrict
+
+  def rebuild_gens(self, sorted_r):
+    "Rebuild the 3 generators with a new sorted router list"
+    self.entry_gen.rebuild(sorted_r)
+    self.mid_gen.rebuild(sorted_r)
+    self.exit_gen.rebuild(sorted_r)
 
   def build_path(self, pathlen):
     """Creates a path of 'pathlen' hops, and returns it as a list of
@@ -1160,9 +1167,7 @@ class PathBuilder(TorCtl.EventHandler):
           self.sorted_r.remove(self.routers[r.idhex])
           del self.routers[r.idhex]
           for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
-          self.selmgr.path_selector.entry_gen.rebuild()
-          self.selmgr.path_selector.mid_gen.rebuild()
-          self.selmgr.path_selector.exit_gen.rebuild()
+          self.selmgr.path_selector.rebuild_gens(self.sorted_r)
       del self.circuits[c.circ_id]
       for stream in circ.pending_streams:
         plog("DEBUG", "Finding new circ for " + str(stream.strm_id))
@@ -1289,21 +1294,14 @@ class PathBuilder(TorCtl.EventHandler):
 
   def ns_event(self, n):
     self.read_routers(n.nslist)
-    # FIXME: Hrmm.. this is poor encapsulation..
-    # Maybe also pass in sorted_r?
-    self.selmgr.path_selector.entry_gen.rebuild()
-    self.selmgr.path_selector.mid_gen.rebuild()
-    self.selmgr.path_selector.exit_gen.rebuild()
+    self.selmgr.path_selector.rebuild_gens(self.sorted_r)
     plog("DEBUG", "Read " + str(len(n.nslist))+" NS => " 
        + str(len(self.sorted_r)) + " routers")
   
   def new_desc_event(self, d):
     for i in d.idlist: # Is this too slow?
       self.read_routers(self.c.get_network_status("id/"+i))
-    # FIXME: Hrmm.. this is poor encapsulation..
-    self.selmgr.path_selector.entry_gen.rebuild()
-    self.selmgr.path_selector.mid_gen.rebuild()
-    self.selmgr.path_selector.exit_gen.rebuild()
+    self.selmgr.path_selector.rebuild_gens(self.sorted_r)
     plog("DEBUG", "Read " + str(len(d.idlist))+" Desc => " 
        + str(len(self.sorted_r)) + " routers")
 
