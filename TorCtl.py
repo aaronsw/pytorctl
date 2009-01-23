@@ -877,11 +877,13 @@ class EventHandler:
       event = CircuitEvent(evtype, ident, status, path, purpose, reason, remote)
     elif evtype == "STREAM":
       #plog("DEBUG", "STREAM: "+body)
-      m = re.match(r"(\S+)\s+(\S+)\s+(\S+)\s+(\S+):(\d+)(\sREASON=\S+)?(\sREMOTE_REASON=\S+)?(\sSOURCE=\S+)?(\sSOURCE_ADDR=\S+)?(\s+PURPOSE=\S+)?", body)
+      m = re.match(r"(\S+)\s+(\S+)\s+(\S+)\s+(\S+)?:(\d+)(\sREASON=\S+)?(\sREMOTE_REASON=\S+)?(\sSOURCE=\S+)?(\sSOURCE_ADDR=\S+)?(\s+PURPOSE=\S+)?", body)
       if not m:
         raise ProtocolError("STREAM event misformatted.")
       ident,status,circ,target_host,target_port,reason,remote,source,source_addr,purpose = m.groups()
       ident,circ = map(int, (ident,circ))
+      if not target: # This can happen on SOCKS_PROTOCOL failures
+        target = "(none)"
       if reason: reason = reason[8:]
       if remote: remote = remote[15:]
       if source: source = source[8:]
