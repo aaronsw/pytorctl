@@ -882,8 +882,8 @@ class EventHandler:
         raise ProtocolError("STREAM event misformatted.")
       ident,status,circ,target_host,target_port,reason,remote,source,source_addr,purpose = m.groups()
       ident,circ = map(int, (ident,circ))
-      if not target: # This can happen on SOCKS_PROTOCOL failures
-        target = "(none)"
+      if not target_host: # This can happen on SOCKS_PROTOCOL failures
+        target_host = "(none)"
       if reason: reason = reason[8:]
       if remote: remote = remote[15:]
       if source: source = source[8:]
