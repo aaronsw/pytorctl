@@ -108,6 +108,9 @@ class NodeRestrictionList:
         lambda r: not isinstance(r, RestrictionClass),
           self.restrictions)
 
+  def __str__(self):
+    return str(self.restrictions)
+
 class PathRestriction:
   "Interface for path restriction policies"
   def path_is_ok(self, path):
@@ -137,6 +140,9 @@ class PathRestrictionList:
         lambda r: not isinstance(r, RestrictionClass),
           self.restrictions)
 
+  def __str__(self):
+    return str(self.restrictions)
+
 class NodeGenerator:
   "Interface for node generation"
   def __init__(self, sorted_r, rstr_list):
@@ -154,7 +160,7 @@ class NodeGenerator:
     "Rewind the generator to the 'beginning'"
     self.routers = copy.copy(self.rstr_routers)
     if not self.routers:
-      plog("ERROR", "No routers left after restrictions applied!")
+      plog("ERROR", "No routers left after restrictions applied: "+str(self.rstr_list))
       raise NoNodesRemain()
  
   def rebuild(self, sorted_r=None):
@@ -164,7 +170,7 @@ class NodeGenerator:
       self.sorted_r = sorted_r
     self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
     if not self.rstr_routers:
-      plog("ERROR", "No routers left after restrictions applied!")
+      plog("ERROR", "No routers left after restrictions applied: "+str(self.rstr_list))
       raise NoNodesRemain()
 
   def mark_chosen(self, r):
@@ -227,6 +233,9 @@ class PercentileRestriction(NodeRestriction):
     elif r.list_rank > len(self.sorted_r)*self.pct_fast/100: return False
     
     return True
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.pct_skip)+","+str(self.pct_fast)+")"
     
 class OSRestriction(NodeRestriction):
   "Restriction based on operating system"
@@ -247,9 +256,15 @@ class OSRestriction(NodeRestriction):
     if self.ok: return False
     if self.bad: return True
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.ok)+","+str(self.bad)+")"
+
 class ConserveExitsRestriction(NodeRestriction):
   "Restriction to reject exits from selection"
   def r_is_ok(self, r): return not "Exit" in r.flags
+
+  def __str__(self):
+    return self.__class__.__name__+"()"
 
 class FlagsRestriction(NodeRestriction):
   "Restriction for mandatory and forbidden router flags"
@@ -266,6 +281,9 @@ class FlagsRestriction(NodeRestriction):
       if f in router.flags: return False
     return True
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.mandatory)+","+str(self.forbidden)+")"
+
 class NickRestriction(NodeRestriction):
   """Require that the node nickname is as specified"""
   def __init__(self, nickname):
@@ -273,6 +291,9 @@ class NickRestriction(NodeRestriction):
 
   def r_is_ok(self, router):
     return router.nickname == self.nickname
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.nickname)+")"
 
 class IdHexRestriction(NodeRestriction):
   """Require that the node idhash is as specified"""
@@ -284,13 +305,19 @@ class IdHexRestriction(NodeRestriction):
 
   def r_is_ok(self, router):
     return router.idhex == self.idhex
-  
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.idhex)+")"
+ 
 class MinBWRestriction(NodeRestriction):
   """Require a minimum bandwidth"""
   def __init__(self, minbw):
     self.min_bw = minbw
 
   def r_is_ok(self, router): return router.bw >= self.min_bw
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.min_bw)+")"
    
 class VersionIncludeRestriction(NodeRestriction):
   """Require that the version match one in the list"""
@@ -306,6 +333,9 @@ class VersionIncludeRestriction(NodeRestriction):
         return True
     return False
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.eq)+")"
+
 class VersionExcludeRestriction(NodeRestriction):
   """Require that the version not match one in the list"""
   def __init__(self, exclude):
@@ -320,6 +350,9 @@ class VersionExcludeRestriction(NodeRestriction):
         return False
     return True
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.exclude)+")"
+
 class VersionRangeRestriction(NodeRestriction):
   """Require that the versions be inside a specified range""" 
   def __init__(self, gr_eq, less_eq=None):
@@ -331,6 +364,9 @@ class VersionRangeRestriction(NodeRestriction):
     return (not self.gr_eq or router.version >= self.gr_eq) and \
         (not self.less_eq or router.version <= self.less_eq)
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.gr_eq)+","+str(self.less_eq)+")"
+
 class ExitPolicyRestriction(NodeRestriction):
   """Require that a router exit to an ip+port"""
   def __init__(self, to_ip, to_port):
@@ -338,6 +374,9 @@ class ExitPolicyRestriction(NodeRestriction):
     self.to_port = to_port
 
   def r_is_ok(self, r): return r.will_exit_to(self.to_ip, self.to_port)
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.to_ip)+","+str(self.to_port)+")"
 
 class MetaNodeRestriction(NodeRestriction):
   """Interface for a NodeRestriction that is an expression consisting of 
@@ -361,12 +400,18 @@ class OrNodeRestriction(MetaNodeRestriction):
         return True
     return False
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.rstrs)+")"
+
 class NotNodeRestriction(MetaNodeRestriction):
   """Negates a single restriction"""
   def __init__(self, a):
     self.a = a
 
   def r_is_ok(self, r): return not self.a.r_is_ok(r)
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.a)+")"
 
 class AtLeastNNodeRestriction(MetaNodeRestriction):
   """MetaNodeRestriction that is true if at least n member 
@@ -383,6 +428,9 @@ class AtLeastNNodeRestriction(MetaNodeRestriction):
     if cnt < self.n: return False
     else: return True
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.rstrs)+","+str(self.n)+")"
+
 
 #################### Path Restrictions #####################
 
@@ -397,6 +445,9 @@ class Subnet16Restriction(PathRestriction):
         return False
     return True
 
+  def __str__(self):
+    return self.__class__.__name__+"()"
+
 class UniqueRestriction(PathRestriction):
   """Path restriction that mandates that the same router can't appear more
      than once in a path"""
@@ -406,12 +457,18 @@ class UniqueRestriction(PathRestriction):
         return False
     return True
 
+  def __str__(self):
+    return self.__class__.__name__+"()"
+
 #################### GeoIP Restrictions ###################
 
 class CountryCodeRestriction(NodeRestriction):
   """ Ensure that the country_code is set """
   def r_is_ok(self, r):
     return r.country_code != None
+
+  def __str__(self):
+    return self.__class__.__name__+"()"
 
 class CountryRestriction(NodeRestriction):
   """ Only accept nodes that are in 'country_code' """
@@ -421,6 +478,9 @@ class CountryRestriction(NodeRestriction):
   def r_is_ok(self, r):
     return r.country_code == self.country_code
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.country_code)+")"
+
 class ExcludeCountriesRestriction(NodeRestriction):
   """ Exclude a list of countries """
   def __init__(self, countries):
@@ -428,6 +488,9 @@ class ExcludeCountriesRestriction(NodeRestriction):
 
   def r_is_ok(self, r):
     return not (r.country_code in self.countries)
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.countries)+")"
 
 class UniqueCountryRestriction(PathRestriction):
   """ Ensure every router to have a distinct country_code """
@@ -438,6 +501,9 @@ class UniqueCountryRestriction(PathRestriction):
           return False;
     return True;
 
+  def __str__(self):
+    return self.__class__.__name__+"()"
+
 class SingleCountryRestriction(PathRestriction):
   """ Ensure every router to have the same country_code """
   def path_is_ok(self, path):
@@ -446,6 +512,9 @@ class SingleCountryRestriction(PathRestriction):
       if country_code != r.country_code:
         return False
     return True
+
+  def __str__(self):
+    return self.__class__.__name__+"()"
 
 class ContinentRestriction(PathRestriction):
   """ Do not more than n continent crossings """
@@ -466,6 +535,9 @@ class ContinentRestriction(PathRestriction):
     if crossings > self.n: return False
     else: return True
 
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.n)+")"
+
 class ContinentJumperRestriction(PathRestriction):
   """ Ensure continent crossings between all hops """
   def path_is_ok(self, path):
@@ -478,6 +550,9 @@ class ContinentJumperRestriction(PathRestriction):
       prev = r
     return True
 
+  def __str__(self):
+    return self.__class__.__name__+"()"
+
 class UniqueContinentRestriction(PathRestriction):
   """ Ensure every hop to be on a different continent """
   def path_is_ok(self, path):
@@ -486,6 +561,9 @@ class UniqueContinentRestriction(PathRestriction):
         if path[i].continent == path[j].continent:
           return False;
     return True;
+
+  def __str__(self):
+    return self.__class__.__name__+"()"
 
 class OceanPhobicRestriction(PathRestriction):
   """ Not more than n ocean crossings """
@@ -505,6 +583,9 @@ class OceanPhobicRestriction(PathRestriction):
       prev = r
     if crossings > self.n: return False
     else: return True
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.n)+")"
 
 #################### Node Generators ######################
 
