@@ -109,7 +109,7 @@ class NodeRestrictionList:
           self.restrictions)
 
   def __str__(self):
-    return str(self.restrictions)
+    return self.__class__.__name__+"("+str(map(str, self.restrictions))+")"
 
 class PathRestriction:
   "Interface for path restriction policies"
@@ -141,7 +141,7 @@ class PathRestrictionList:
           self.restrictions)
 
   def __str__(self):
-    return str(self.restrictions)
+    return self.__class__.__name__+"("+str(map(str, self.restrictions))+")"
 
 class NodeGenerator:
   "Interface for node generation"
@@ -351,7 +351,7 @@ class VersionExcludeRestriction(NodeRestriction):
     return True
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(self.exclude)+")"
+    return self.__class__.__name__+"("+str(map(str, self.exclude))+")"
 
 class VersionRangeRestriction(NodeRestriction):
   """Require that the versions be inside a specified range""" 
@@ -401,7 +401,7 @@ class OrNodeRestriction(MetaNodeRestriction):
     return False
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(self.rstrs)+")"
+    return self.__class__.__name__+"("+str(map(str, self.rstrs))+")"
 
 class NotNodeRestriction(MetaNodeRestriction):
   """Negates a single restriction"""
@@ -429,7 +429,7 @@ class AtLeastNNodeRestriction(MetaNodeRestriction):
     else: return True
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(self.rstrs)+","+str(self.n)+")"
+    return self.__class__.__name__+"("+str(map(str, self.rstrs))+","+str(self.n)+")"
 
 
 #################### Path Restrictions #####################
