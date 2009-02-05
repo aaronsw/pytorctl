@@ -161,6 +161,12 @@ class AddrMapEvent:
     self.to_addr = to_addr
     self.when = when
 
+class AddrMap:
+  def __init__(self, from_addr, to_addr, when):
+    self.from_addr = from_addr
+    self.to_addr = to_addr
+    self.when = when
+
 class BWEvent:
   def __init__(self, event_name, read, written):
     self.event_name = event_name
@@ -645,6 +651,36 @@ class Connection:
     """Get the entire network status list. Returns a list of
        TorCtl.NetworkStatus instances."""
     return parse_ns_body(self.sendAndRecv("GETINFO ns/"+who+"\r\n")[0][2])
+
+  def get_address_mappings(self, type="all"):
+    # TODO: Also parse errors and GMTExpiry
+    body = self.sendAndRecv("GETINFO address-mappings/"+type+"\r\n")
+      
+    #print "|"+body[0][1].replace("address-mappings/"+type+"=", "")+"|"
+    #print str(body[0])
+
+    if body[0][1].replace("address-mappings/"+type+"=", "") != "":
+      # one line
+      lines = [body[0][1].replace("address-mappings/"+type+"=", "")]
+    elif not body[0][2]:
+      return []
+    else:
+      lines = body[0][2].split("\n")
+    if not lines: return []
+    ret = []
+    for l in lines:
+      #print "|"+str(l)+"|"
+      if len(l) == 0: continue #Skip last line.. it's empty
+      m = re.match(r'(\S+)\s+(\S+)\s+(\"[^"]+\"|\w+)', l)
+      if not m:
+        raise ProtocolError("ADDRMAP response misformatted.")
+      fromaddr, toaddr, when = m.groups()
+      if when.upper() == "NEVER":  
+        when = None
+      else:
+        when = time.strptime(when[1:-1], "%Y-%m-%d %H:%M:%S")
+      ret.append(AddrMap(fromaddr, toaddr, when))
+    return ret
 
   def get_router(self, ns):
     """Fill in a Router class corresponding to a given NS class"""
