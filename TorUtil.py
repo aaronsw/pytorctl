@@ -18,7 +18,7 @@ import time
 
 __all__ = ["Enum", "Enum2", "Callable", "sort_list", "quote", "escape_dots", "unescape_dots",
       "BufSock", "secret_to_key", "urandom_rng", "s2k_gen", "s2k_check", "plog", 
-     "ListenSocket", "zprob"]
+     "ListenSocket", "zprob", "logfile", "loglevel"]
 
 # TODO: Make functions to read these from a config file. This isn't
 # the right place for them either.. But at least it's unified.
@@ -209,12 +209,17 @@ def s2k_check(secret, k):
 ## XXX: Make this a class?
 loglevel = "DEBUG"
 loglevels = {"DEBUG" : 0, "INFO" : 1, "NOTICE" : 2, "WARN" : 3, "ERROR" : 4}
+logfile=None
 
 def plog(level, msg): # XXX: Timestamps
   if(loglevels[level] >= loglevels[loglevel]):
     t = time.strftime("%a %b %d %H:%M:%S %Y")
-    print level, '[', t, ']:', msg
-    sys.stdout.flush()
+    if logfile:
+      logfile.write(level+'['+t+']:'+msg+"\n")
+      logfile.flush()
+    else:
+      print level, '[', t, ']:', msg
+      sys.stdout.flush()
 
 # Stolen from
 # http://www.nmr.mgh.harvard.edu/Neural_Systems_Group/gary/python/stats.py

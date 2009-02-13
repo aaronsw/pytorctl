@@ -160,7 +160,7 @@ class NodeGenerator:
     "Rewind the generator to the 'beginning'"
     self.routers = copy.copy(self.rstr_routers)
     if not self.routers:
-      plog("ERROR", "No routers left after restrictions applied: "+str(self.rstr_list))
+      plog("WARN", "No routers left after restrictions applied: "+str(self.rstr_list))
       raise NoNodesRemain()
  
   def rebuild(self, sorted_r=None):
@@ -170,7 +170,7 @@ class NodeGenerator:
       self.sorted_r = sorted_r
     self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
     if not self.rstr_routers:
-      plog("ERROR", "No routers left after restrictions applied: "+str(self.rstr_list))
+      plog("WARN", "No routers left after restrictions applied: "+str(self.rstr_list))
       raise NoNodesRemain()
 
   def mark_chosen(self, r):
@@ -1212,7 +1212,14 @@ class PathBuilder(TorCtl.EventHandler):
           break
     else:
       circ = None
-      self.selmgr.set_target(stream.host, stream.port)
+      try:
+        self.selmgr.set_target(stream.host, stream.port)
+      except NoNodesRemain:
+        self.last_exit = None
+        # Kill this stream
+        plog("NOTICE", "Closing stream "+str(stream.strm_id))
+        self.c.close_stream(stream.strm_id)
+        return
       while circ == None:
         try:
           circ = self.c.build_circuit(
