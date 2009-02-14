@@ -1310,9 +1310,11 @@ class PathBuilder(TorCtl.EventHandler):
         self.streams[s.strm_id] = Stream(s.strm_id, s.target_host,
                       s.target_port, "NEW")
       # FIXME Stats (differentiate Resolved streams also..)
-      # XXX: This can happen for timeouts
       if not s.circ_id:
-        plog("WARN", "Stream "+str(s.strm_id)+" detached from no circuit!")
+        if s.reason == "TIMEOUT":
+          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with timeout.")
+        else:
+          plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
       else:
         self.streams[s.strm_id].detached_from.append(s.circ_id)
       
@@ -1349,7 +1351,10 @@ class PathBuilder(TorCtl.EventHandler):
 
       # XXX: Can happen on timeout
       if not s.circ_id:
-        plog("WARN", "Stream "+str(s.strm_id)+" failed from no circuit!")
+        if s.reason == "TIMEOUT":
+          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with timeout.")
+        else:
+          plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
 
       # We get failed and closed for each stream. OK to return 
       # and let the closed do the cleanup

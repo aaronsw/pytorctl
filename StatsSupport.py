@@ -614,9 +614,12 @@ class StatsHandler(PathSupport.PathBuilder):
       if (s.status in ("DETACHED", "FAILED", "CLOSED", "SUCCEEDED")
           and not s.circ_id):
         # XXX: REMAPs can do this (normal). Also REASON=DESTROY (bug?)
-        # Also timeouts.. Those should use the pending circ instead
+        # XXX: Timeouts should count failure on the pending circ instead 
         # of returning..
-        plog("WARN", "Stream "+str(s.strm_id)+" detached from no circuit!")
+        if s.reason == "TIMEOUT":
+          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with timeout.")
+        else:
+          plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
         PathBuilder.stream_status_event(self, s)
         return
 
