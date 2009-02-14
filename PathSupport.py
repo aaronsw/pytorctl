@@ -1218,7 +1218,7 @@ class PathBuilder(TorCtl.EventHandler):
         self.last_exit = None
         # Kill this stream
         plog("NOTICE", "Closing stream "+str(stream.strm_id))
-        self.c.close_stream(stream.strm_id)
+        self.c.close_stream(stream.strm_id, "4") # END_STREAM_REASON_EXITPOLICY
         return
       while circ == None:
         try:
