@@ -1134,7 +1134,7 @@ class ConsensusTracker(EventHandler):
     update = False
     for i in d.idlist:
       ns = self.c.get_network_status("id/"+i)
-      r = self.c.read_router(ns)
+      r = self.c.read_routers(ns)
       if r and r.idhex in self.consensus:
         if ns.orhash != self.consensus[r.idhex].orhash:
           plog("WARN", "Getinfo and consensus disagree for "+r.idhex)
