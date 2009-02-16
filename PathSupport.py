@@ -1366,6 +1366,8 @@ class PathBuilder(TorCtl.EventHandler):
         # traffic. 
         self.streams[s.strm_id].failed = True
         if s.circ_id in self.circuits: self.circuits[s.circ_id].dirty = True
+        if s.circ_id == 0 and s.reason == "TIMEOUT":
+          plog("NOTICE", "Timeout for "+str(s.strm_id)) 
         else: plog("WARN","Failed stream on unknown circ "+str(s.circ_id))
         return
 
