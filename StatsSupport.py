@@ -677,21 +677,30 @@ class StatsHandler(PathSupport.PathBuilder):
           self.count_stream_reason_failed(s, reason)
     PathBuilder.stream_status_event(self, s)
 
-  def newconsensus_event(self, n):
-    PathBuilder.newconsensus_event(self, n)
+  def _check_hibernation(self, r, now):
+    if r.down:
+      if not r.hibernated_at:
+        r.hibernated_at = now
+        r.total_active_uptime += now - r.became_active_at
+      r.became_active_at = 0
+    else:
+      if not r.became_active_at:
+        r.became_active_at = now
+        r.total_hibernation_time += now - r.hibernated_at
+      r.hibernated_at = 0
+
+  def new_consensus_event(self, n):
+    PathBuilder.new_consensus_event(self, n)
     now = n.arrived_at
     for ns in n.nslist:
-      if not ns.idhex in self.routers:
-        continue
-      r = self.routers[ns.idhex]
-      if r.down:
-        if not r.hibernated_at:
-          r.hibernated_at = now
-          r.total_active_uptime += now - r.became_active_at
-        r.became_active_at = 0
-      else:
-        if not r.became_active_at:
-          r.became_active_at = now
-          r.total_hibernation_time += now - r.hibernated_at
-        r.hibernated_at = 0
+      if not ns.idhex in self.routers: continue
+      self._check_hibernation(self.routers[ns.idhex], now)
 
+  def new_desc_event(self, d):
+    if PathBuilder.new_desc_event(self, d):
+      now = d.arrived_at
+      for i in d.idlist:
+        if not i in self.routers: continue
+        self._check_hibernation(self.routers[i], now)
+      
+   

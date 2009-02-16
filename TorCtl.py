@@ -27,7 +27,7 @@ __all__ = ["EVENT_TYPE", "TorCtlError", "TorCtlClosed", "ProtocolError",
            "EventHandler", "DebugEventHandler", "NetworkStatusEvent",
            "NewDescEvent", "CircuitEvent", "StreamEvent", "ORConnEvent",
            "StreamBwEvent", "LogEvent", "AddrMapEvent", "BWEvent",
-           "UnknownEvent" ]
+           "UnknownEvent", "ConsensusTracker" ]
 
 import os
 import re
@@ -42,6 +42,8 @@ import binascii
 import types
 import time
 import sha
+import sets
+import copy
 from TorUtil import *
 
 # Types of "EVENT" message.
@@ -257,7 +259,13 @@ class Router:
   created from the parsed fields, or can be built from a
   descriptor+NetworkStatus 
   """     
-  def __init__(self, idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime):
+  def __init__(self, *args):
+    if len(args) == 1:
+      for i in args[0].__dict__:
+        self.__dict__[i] =  copy.deepcopy(args[0].__dict__[i])
+      return
+    else:
+      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime) = args
     self.idhex = idhex
     self.nickname = name
     self.bw = bw
@@ -694,8 +702,10 @@ class Connection:
     sig_start = desc.find("\nrouter-signature\n")+len("\nrouter-signature\n")
     fp_base64 = sha.sha(desc[:sig_start]).digest().encode("base64")[:-2]
     if fp_base64 != ns.orhash:
-      plog("WARN", "Router descriptor for "+ns.idhex+" does not match ns fingerprint ("+ns.orhash+" vs "+fp_base64+")")
-    return Router.build_from_desc(desc.split("\n"), ns)
+      plog("NOTICE", "Router descriptor for "+ns.idhex+" does not match ns fingerprint ("+ns.orhash+" vs "+fp_base64+")")
+      return None
+    else:
+      return Router.build_from_desc(desc.split("\n"), ns)
 
 
   def read_routers(self, nslist):
@@ -707,7 +717,7 @@ class Connection:
     for ns in nslist:
       try:
         r = self.get_router(ns)
-        new.append(r)
+        if r: new.append(r)
       except ErrorReply:
         bad_key += 1
         if "Running" in ns.flags:
@@ -873,7 +883,7 @@ class EventHandler:
       "NEWDESC" : self.new_desc_event,
       "ADDRMAP" : self.address_mapped_event,
       "NS" : self.ns_event,
-      "NEWCONSENSUS" : self.newconsensus_event
+      "NEWCONSENSUS" : self.new_consensus_event
       }
 
   def _handle1(self, timestamp, lines):
@@ -1042,7 +1052,7 @@ class EventHandler:
   def ns_event(self, event):
     raise NotImplemented()
 
-  def newconsensus_event(self, event):
+  def new_consensus_event(self, event):
     raise NotImplemented()
 
   def address_mapped_event(self, event):
@@ -1050,6 +1060,97 @@ class EventHandler:
        to ADDRESSMAPPED events.
     """
     raise NotImplemented()
+
+class ConsensusTracker(EventHandler):
+  """
+  A ConsensusTracker is an EventHandler that tracks the current
+  consensus of Tor in self.consensus, self.routers and self.sorted_r
+  """
+  def __init__(self, c, RouterClass=Router):
+    EventHandler.__init__(self)
+    c.set_event_handler(self)
+    self.c = c
+    self.consensus = {}
+    self.routers = {}
+    self.sorted_r = []
+    self.name_to_key = {}
+    self.RouterClass = RouterClass
+    self.update_consensus()
+    self._read_routers(self.consensus.values())
+
+  def _read_routers(self, nslist):
+    old_idhexes = sets.Set(self.routers.keys())
+    new_idhexes = sets.Set(map(lambda ns: ns.idhex, nslist))
+    removed_idhexes = old_idhexes - new_idhexes
+    removed_idhexes.union_update(sets.Set(map(lambda ns: ns.idhex,
+                      filter(lambda ns: "Running" not in ns.flags, nslist))))
+
+    for i in removed_idhexes:
+      if i not in self.routers: continue
+      self.routers[i].down = True
+      self.routers[i].flags.remove("Running")
+      if self.routers[i].refcount == 0:
+        self.routers[i].deleted = True
+        plog("INFO", "Expiring non-running router "+i)
+        self.sorted_r.remove(self.routers[i])
+        del self.routers[i]
+      else:
+        plog("INFO", "Postponing expiring non-running router "+i)
+        self.routers[i].deleted = True
+
+    routers = self.c.read_routers(nslist)
+    for r in routers:
+      self.name_to_key[r.nickname] = "$"+r.idhex
+      if r.idhex in self.routers:
+        if self.routers[r.idhex].nickname != r.nickname:
+          plog("NOTICE", "Router "+r.idhex+" changed names from "
+             +self.routers[r.idhex].nickname+" to "+r.nickname)
+        # Must do IN-PLACE update to keep all the refs to this router
+        # valid and current (especially for stats)
+        self.routers[r.idhex].update_to(r)
+      else:
+        rc = self.RouterClass(r)
+        self.routers[rc.idhex] = rc
+
+    self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
+    self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
+    for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
+
+  def _update_consensus(self, nslist):
+    self.consensus = {}
+    for n in nslist:
+      self.consensus[n.idhex] = n
+   
+  def update_consensus(self):
+    self._update_consensus(self.c.get_network_status())
+
+  def new_consensus_event(self, n):
+    self._update_consensus(n.nslist)
+    self._read_routers(self.consensus.values())
+    plog("DEBUG", "Read " + str(len(n.nslist))+" NC => " 
+       + str(len(self.sorted_r)) + " routers")
+ 
+  def new_desc_event(self, d):
+    update = False
+    for i in d.idlist:
+      ns = self.c.get_network_status("id/"+i)
+      r = self.c.read_router(ns)
+      if r and r.idhex in self.consensus:
+        if ns.orhash != self.consensus[r.idhex].orhash:
+          plog("WARN", "Getinfo and consensus disagree for "+r.idhex)
+          continue
+        update = True
+        if r.idhex in self.routers:
+          self.routers[r.idhex].update_to(r)
+        else:
+          self.routers[r.idhex] = self.RouterClass(r)
+    if update:
+      self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
+      self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
+      for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
+    plog("DEBUG", "Read " + str(len(d.idlist))+" ND => " 
+       + str(len(self.sorted_r)) + " routers. Update: "+str(update))
+    return update
 
 
 class DebugEventHandler(EventHandler):
@@ -1081,7 +1182,7 @@ class DebugEventHandler(EventHandler):
         ns.updated.isoformat(), ns.ip, str(ns.orport),
         str(ns.dirport), " ".join(ns.flags)))
 
-  def newconsensus_event(self, nc_event):
+  def new_consensus_event(self, nc_event):
     self.ns_event(nc_event)
 
   def new_desc_event(self, newdesc_event):

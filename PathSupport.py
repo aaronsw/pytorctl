@@ -48,7 +48,6 @@ import copy
 import Queue
 import time
 import TorUtil
-import sets
 from TorUtil import *
 
 __all__ = ["NodeRestrictionList", "PathRestrictionList",
@@ -1025,7 +1024,7 @@ class Stream:
 # node reliability stats for normal usage without us attaching streams
 # Can use __metaclass__ and type
 
-class PathBuilder(TorCtl.EventHandler):
+class PathBuilder(TorCtl.ConsensusTracker):
   """
   PathBuilder implementation. Handles circuit construction, subject
   to the constraints of the SelectionManager selmgr.
@@ -1038,27 +1037,20 @@ class PathBuilder(TorCtl.EventHandler):
     """Constructor. 'c' is a Connection, 'selmgr' is a SelectionManager,
     and 'RouterClass' is a class that inherits from Router and is used
     to create annotated Routers."""
-    TorCtl.EventHandler.__init__(self)
-    self.c = c
-    nslist = c.get_network_status()
+    TorCtl.ConsensusTracker.__init__(self, c, RouterClass)
     self.last_exit = None
     self.new_nym = False
     self.resolve_port = 0
     self.num_circuits = 1
-    self.RouterClass = RouterClass
-    self.sorted_r = []
-    self.name_to_key = {}
-    self.routers = {}
     self.circuits = {}
     self.streams = {}
-    self.read_routers(nslist)
     self.selmgr = selmgr
     self.selmgr.reconfigure(self.sorted_r)
     self.imm_jobs = Queue.Queue()
     self.low_prio_jobs = Queue.Queue()
     self.run_all_jobs = False
     self.do_reconfigure = False
-    plog("INFO", "Read "+str(len(self.sorted_r))+"/"+str(len(nslist))+" routers")
+    plog("INFO", "Read "+str(len(self.sorted_r))+"/"+str(len(self.consensus))+" routers")
 
   def schedule_immediate(self, job):
     """
@@ -1118,44 +1110,6 @@ class PathBuilder(TorCtl.EventHandler):
     if not self.low_prio_jobs.empty():
       delay_job = self.low_prio_jobs.get_nowait()
       delay_job(self)
-
-  def read_routers(self, nslist):
-    old_idhexes = sets.Set(self.routers.keys())
-    new_idhexes = sets.Set(map(lambda ns: ns.idhex, nslist))
-    removed_idhexes = old_idhexes - new_idhexes
-    removed_idhexes.union_update(sets.Set(map(lambda ns: ns.idhex,
-                      filter(lambda ns: "Running" not in ns.flags, nslist))))
-
-    for i in removed_idhexes:
-      if i not in self.routers: continue
-      self.routers[i].down = True
-      self.routers[i].flags.remove("Running")
-      if self.routers[i].refcount == 0:
-        self.routers[i].deleted = True
-        plog("INFO", "Expiring non-running router "+i)
-        self.sorted_r.remove(self.routers[i])
-        del self.routers[i]
-      else:
-        plog("INFO", "Postponing expiring non-running router "+i)
-        self.routers[i].deleted = True
-
-    routers = self.c.read_routers(nslist)
-    for r in routers:
-      self.name_to_key[r.nickname] = "$"+r.idhex
-      if r.idhex in self.routers:
-        if self.routers[r.idhex].nickname != r.nickname:
-          plog("NOTICE", "Router "+r.idhex+" changed names from "
-             +self.routers[r.idhex].nickname+" to "+r.nickname)
-        # Must do IN-PLACE update to keep all the refs to this router
-        # valid and current (especially for stats)
-        self.routers[r.idhex].update_to(r)
-      else:
-        rc = self.RouterClass(r)
-        self.routers[rc.idhex] = rc
-
-    self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
-    self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
-    for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
 
   def build_path(self):
     """ Get a path from the SelectionManager's PathSelector, can be used 
@@ -1395,12 +1349,14 @@ class PathBuilder(TorCtl.EventHandler):
       self.streams[s.strm_id].bytes_read += s.bytes_read
       self.streams[s.strm_id].bytes_written += s.bytes_written
 
-  def newconsensus_event(self, n):
-    self.read_routers(n.nslist)
+  def new_consensus_event(self, n):
+    TorCtl.ConsensusTracker.new_desc_event(self, n)
     self.selmgr.path_selector.rebuild_gens(self.sorted_r)
-    plog("DEBUG", "Read " + str(len(n.nslist))+" NC => " 
-       + str(len(self.sorted_r)) + " routers")
-  
+
+  def new_desc_event(self, d):
+    if TorCtl.ConsensusTracker.new_desc_event(self, d):
+      self.selmgr.path_selector.rebuild_gens(self.sorted_r)
+
   def bandwidth_event(self, b): pass # For heartbeat only..
 
 ################### CircuitHandler #############################
