@@ -48,6 +48,7 @@ import copy
 import Queue
 import time
 import TorUtil
+import sets
 from TorUtil import *
 
 __all__ = ["NodeRestrictionList", "PathRestrictionList",
@@ -1119,24 +1120,26 @@ class PathBuilder(TorCtl.EventHandler):
       delay_job(self)
 
   def read_routers(self, nslist):
-    for ns in nslist:
-      if not "Running" in ns.flags:
-        if ns.idhex in self.routers:
-          self.routers[ns.idhex].down = True
-          self.routers[ns.idhex].flags = ns.flags
-          if self.routers[ns.idhex].refcount == 0:
-            self.routers[ns.idhex].deleted = True
-            plog("INFO", "Expiring non-running router "+ns.idhex)
-            self.sorted_r.remove(self.routers[ns.idhex])
-            del self.routers[ns.idhex]
-          else:
-            plog("INFO", "Postponing expiring non-running router "+ns.idhex)
-            self.routers[ns.idhex].deleted = True
+    old_idhexes = sets.Set(self.routers.keys())
+    new_idhexes = sets.Set(map(lambda ns: ns.idhex, nslist))
+    removed_idhexes = old_idhexes - new_idhexes
+    removed_idhexes.union_update(sets.Set(map(lambda ns: ns.idhex,
+                      filter(lambda ns: "Running" not in ns.flags, nslist))))
 
-    nslist = filter(lambda ns: "Running" in ns.flags, nslist)
-  
+    for i in removed_idhexes:
+      if i not in self.routers: continue
+      self.routers[i].down = True
+      self.routers[i].flags.remove("Running")
+      if self.routers[i].refcount == 0:
+        self.routers[i].deleted = True
+        plog("INFO", "Expiring non-running router "+i)
+        self.sorted_r.remove(self.routers[i])
+        del self.routers[i]
+      else:
+        plog("INFO", "Postponing expiring non-running router "+ns.idhex)
+        self.routers[i].deleted = True
+
     routers = self.c.read_routers(nslist)
-    new_routers = []
     for r in routers:
       self.name_to_key[r.nickname] = "$"+r.idhex
       if r.idhex in self.routers:
@@ -1149,8 +1152,8 @@ class PathBuilder(TorCtl.EventHandler):
       else:
         rc = self.RouterClass(r)
         self.routers[rc.idhex] = rc
-        new_routers.append(rc)
-    self.sorted_r.extend(new_routers)
+
+    self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
     self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
     for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
 
@@ -1390,19 +1393,12 @@ class PathBuilder(TorCtl.EventHandler):
       self.streams[s.strm_id].bytes_read += s.bytes_read
       self.streams[s.strm_id].bytes_written += s.bytes_written
 
-  def ns_event(self, n):
+  def newconsensus_event(self, n):
     self.read_routers(n.nslist)
     self.selmgr.path_selector.rebuild_gens(self.sorted_r)
-    plog("DEBUG", "Read " + str(len(n.nslist))+" NS => " 
+    plog("DEBUG", "Read " + str(len(n.nslist))+" NC => " 
        + str(len(self.sorted_r)) + " routers")
   
-  def new_desc_event(self, d):
-    for i in d.idlist: # Is this too slow?
-      self.read_routers(self.c.get_network_status("id/"+i))
-    self.selmgr.path_selector.rebuild_gens(self.sorted_r)
-    plog("DEBUG", "Read " + str(len(d.idlist))+" Desc => " 
-       + str(len(self.sorted_r)) + " routers")
-
   def bandwidth_event(self, b): pass # For heartbeat only..
 
 ################### CircuitHandler #############################

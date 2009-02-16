@@ -677,20 +677,21 @@ class StatsHandler(PathSupport.PathBuilder):
           self.count_stream_reason_failed(s, reason)
     PathBuilder.stream_status_event(self, s)
 
-  def ns_event(self, n):
-    PathBuilder.ns_event(self, n)
+  def newconsensus_event(self, n):
+    PathBuilder.newconsensus_event(self, n)
     now = n.arrived_at
     for ns in n.nslist:
       if not ns.idhex in self.routers:
         continue
       r = self.routers[ns.idhex]
-      if "Running" in ns.flags:
-        if not r.became_active_at:
-          r.became_active_at = now
-          r.total_hibernation_time += now - r.hibernated_at
-        r.hibernated_at = 0
-      else:
+      if r.down:
         if not r.hibernated_at:
           r.hibernated_at = now
           r.total_active_uptime += now - r.became_active_at
         r.became_active_at = 0
+      else:
+        if not r.became_active_at:
+          r.became_active_at = now
+          r.total_hibernation_time += now - r.hibernated_at
+        r.hibernated_at = 0
+

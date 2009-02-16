@@ -41,6 +41,7 @@ import socket
 import binascii
 import types
 import time
+import sha
 from TorUtil import *
 
 # Types of "EVENT" message.
@@ -50,7 +51,8 @@ EVENT_TYPE = Enum2(
           ORCONN="ORCONN",
           STREAM_BW="STREAM_BW",
           BW="BW",
-          NS="NS",
+		  NS="NS",
+          NEWCONSENSUS="NEWCONSENSUS",
           NEWDESC="NEWDESC",
           ADDRMAP="ADDRMAP",
           DEBUG="DEBUG",
@@ -94,6 +96,9 @@ class NetworkStatusEvent:
     self.event_name = event_name
     self.arrived_at = 0
     self.nslist = nslist # List of NetworkStatus objects
+
+class NewConsensusEvent(NetworkStatusEvent):
+  pass
 
 class NewDescEvent:
   def __init__(self, event_name, idlist):
@@ -300,7 +305,7 @@ class Router:
       bw = re.search(r"^bandwidth (\d+) \d+ (\d+)", line)
       up = re.search(r"^uptime (\d+)", line)
       if re.search(r"^opt hibernating 1", line):
-        #dead = 1 # XXX: Technically this may be stale..
+        dead = True 
         if ("Running" in ns.flags):
           plog("INFO", "Hibernating router "+ns.nickname+" is running, flags: "+" ".join(ns.flags))
       if ac:
@@ -320,6 +325,7 @@ class Router:
              router + " for " + ns.idhex)
     if not bw_observed and not dead and ("Valid" in ns.flags):
       plog("INFO", "No bandwidth for live router "+ns.nickname+", flags: "+" ".join(ns.flags))
+      dead = True
     if not version or not os:
       plog("INFO", "No version and/or OS for router " + ns.nickname)
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
@@ -684,8 +690,12 @@ class Connection:
 
   def get_router(self, ns):
     """Fill in a Router class corresponding to a given NS class"""
-    desc = self.sendAndRecv("GETINFO desc/id/" + ns.idhex + "\r\n")[0][2].split("\n")
-    return Router.build_from_desc(desc, ns)
+    desc = self.sendAndRecv("GETINFO desc/id/" + ns.idhex + "\r\n")[0][2]
+    sig_start = desc.find("\nrouter-signature\n")+len("\nrouter-signature\n")
+    fp_base64 = sha.sha(desc[:sig_start]).digest().encode("base64")[:-2]
+    if fp_base64 != ns.orhash:
+      plog("WARN", "Router descriptor for "+ns.idhex+" does not match ns fingerprint ("+ns.orhash+" vs "+fp_base64+")")
+    return Router.build_from_desc(desc.split("\n"), ns)
 
 
   def read_routers(self, nslist):
@@ -862,7 +872,8 @@ class EventHandler:
       "ERR" : self.msg_event,
       "NEWDESC" : self.new_desc_event,
       "ADDRMAP" : self.address_mapped_event,
-      "NS" : self.ns_event
+      "NS" : self.ns_event,
+      "NEWCONSENSUS" : self.newconsensus_event
       }
 
   def _handle1(self, timestamp, lines):
@@ -975,6 +986,8 @@ class EventHandler:
       event = AddrMapEvent(evtype, fromaddr, toaddr, when)
     elif evtype == "NS":
       event = NetworkStatusEvent(evtype, parse_ns_body(data))
+    elif evtype == "NEWCONSENSUS":
+      event = NewConsensusEvent(evtype, parse_ns_body(data))
     else:
       event = UnknownEvent(evtype, body)
 
@@ -1029,6 +1042,9 @@ class EventHandler:
   def ns_event(self, event):
     raise NotImplemented()
 
+  def newconsensus_event(self, event):
+    raise NotImplemented()
+
   def address_mapped_event(self, event):
     """Called when Tor adds a mapping for an address if listening
        to ADDRESSMAPPED events.
@@ -1064,6 +1080,9 @@ class DebugEventHandler(EventHandler):
       print " ".join((ns_event.event_name, ns.nickname, ns.idhash,
         ns.updated.isoformat(), ns.ip, str(ns.orport),
         str(ns.dirport), " ".join(ns.flags)))
+
+  def newconsensus_event(self, nc_event):
+    self.ns_event(nc_event)
 
   def new_desc_event(self, newdesc_event):
     print " ".join((newdesc_event.event_name, " ".join(newdesc_event.idlist)))
@@ -1146,7 +1165,7 @@ def run_example(host,port):
   #set_events(s,[EVENT_TYPE.WARN])
 #  c.set_events([EVENT_TYPE.ORCONN], True)
   c.set_events([EVENT_TYPE.STREAM, EVENT_TYPE.CIRC,
-          EVENT_TYPE.NS, EVENT_TYPE.NEWDESC,
+          EVENT_TYPE.NEWCONSENSUS, EVENT_TYPE.NEWDESC,
           EVENT_TYPE.ORCONN, EVENT_TYPE.BW], True)
 
   th.join()
