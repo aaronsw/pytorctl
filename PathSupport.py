@@ -1136,7 +1136,7 @@ class PathBuilder(TorCtl.EventHandler):
         self.sorted_r.remove(self.routers[i])
         del self.routers[i]
       else:
-        plog("INFO", "Postponing expiring non-running router "+ns.idhex)
+        plog("INFO", "Postponing expiring non-running router "+i)
         self.routers[i].deleted = True
 
     routers = self.c.read_routers(nslist)
