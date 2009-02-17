@@ -1135,6 +1135,12 @@ class ConsensusTracker(EventHandler):
     for i in d.idlist:
       ns = self.c.get_network_status("id/"+i)
       r = self.c.read_routers(ns)
+      if not r:
+        plog("WARN", "No router desc for "+i+" after NEWDESC")
+        continue
+      elif if len(r) != 1:
+        plog("WARN", "Multiple descs for "+i+" after NEWDESC")
+      r = r[0]
       if r and r.idhex in self.consensus:
         if ns.orhash != self.consensus[r.idhex].orhash:
           plog("WARN", "Getinfo and consensus disagree for "+r.idhex)
