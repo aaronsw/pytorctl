@@ -1138,7 +1138,7 @@ class ConsensusTracker(EventHandler):
       if not r:
         plog("WARN", "No router desc for "+i+" after NEWDESC")
         continue
-      elif if len(r) != 1:
+      elif len(r) != 1:
         plog("WARN", "Multiple descs for "+i+" after NEWDESC")
       r = r[0]
       if r and r.idhex in self.consensus:
