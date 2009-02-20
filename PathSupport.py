@@ -1356,7 +1356,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
       self.streams[s.strm_id].bytes_written += s.bytes_written
 
   def new_consensus_event(self, n):
-    TorCtl.ConsensusTracker.new_desc_event(self, n)
+    TorCtl.ConsensusTracker.new_consensus_event(self, n)
     self.selmgr.path_selector.rebuild_gens(self.sorted_r)
 
   def new_desc_event(self, d):
