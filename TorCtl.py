@@ -1099,7 +1099,6 @@ class ConsensusTracker(EventHandler):
       if self.routers[i].refcount == 0:
         self.routers[i].deleted = True
         plog("INFO", "Expiring non-running router "+i)
-        self.sorted_r.remove(self.routers[i])
         del self.routers[i]
       else:
         plog("INFO", "Postponing expiring non-running router "+i)
