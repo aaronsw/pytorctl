@@ -426,6 +426,9 @@ class Connection:
     while 1:
       try:
         isEvent, reply = self._read_reply()
+      except TorCtlClosed:
+        plog("NOTICE", "Tor closed control connection. Exiting event thread.")
+        return
       except:
         if not self._closed:
           self._err(sys.exc_info())
@@ -491,7 +494,7 @@ class Connection:
 
   def _sendImpl(self, sendFn, msg):
     """DOCDOC"""
-    if self._thread is None:
+    if self._thread is None and not self._closed:
       self.launch_thread(1)
     # This condition will get notified when we've got a result...
     condition = threading.Condition()
@@ -549,7 +552,11 @@ class Connection:
   def _read_reply(self):
     lines = []
     while 1:
-      line = self._s.readline().strip()
+      line = self._s.readline()
+      if not line:
+        self._closed = True
+        raise TorCtlClosed() 
+      line = line.strip()
       if self._debugFile:
         self._debugFile.write("  %s\n" % line)
       if len(line)<4:
@@ -588,7 +595,7 @@ class Connection:
       lines = amsg.split("\n")
       if len(lines) > 2:
         amsg = "\n".join(lines[:2]) + "\n"
-      self._debugFile.write(">>> %s" % amsg)
+      self._debugFile.write(str(time.time())+">>> "+amsg)
     self._s.write(msg)
 
   def sendAndRecv(self, msg="", expectedTypes=("250", "251")):
@@ -1141,6 +1148,7 @@ class ConsensusTracker(EventHandler):
       elif len(r) != 1:
         plog("WARN", "Multiple descs for "+i+" after NEWDESC")
       r = r[0]
+      ns = ns[0]
       if r and r.idhex in self.consensus:
         if ns.orhash != self.consensus[r.idhex].orhash:
           plog("WARN", "Getinfo and consensus disagree for "+r.idhex)

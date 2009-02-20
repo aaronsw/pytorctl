@@ -1186,7 +1186,13 @@ class PathBuilder(TorCtl.ConsensusTracker):
           # FIXME: How come some routers are non-existant? Shouldn't
           # we have gotten an NS event to notify us they
           # disappeared?
-          plog("NOTICE", "Error building circ: "+str(e.args))
+          plog("WARN", "Error building circ: "+str(e.args))
+          self.last_exit = None
+          # Kill this stream
+          plog("NOTICE", "Closing stream "+str(stream.strm_id))
+          # END_STREAM_REASON_DESTROY
+          self.c.close_stream(stream.strm_id, "5") 
+          return
       for u in unattached_streams:
         plog("DEBUG",
            "Attaching "+str(u.strm_id)+" pending build of "+str(circ.circ_id))
@@ -1404,7 +1410,7 @@ class CircuitHandler(PathBuilder):
       except TorCtl.ErrorReply, e:
         # FIXME: How come some routers are non-existant? Shouldn't
         # we have gotten an NS event to notify us they disappeared?
-        plog("NOTICE", "Error building circuit: " + str(e.args))
+        plog("WARN", "Error building circuit: " + str(e.args))
 
   def circ_status_event(self, c):
     """ Handle circuit status events """

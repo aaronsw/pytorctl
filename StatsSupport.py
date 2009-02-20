@@ -627,12 +627,14 @@ class StatsHandler(PathSupport.PathBuilder):
       if s.status not in ("NEW", "NEWRESOLVE", "REMAP"):
         circ = self.streams[s.strm_id].circ
         if not circ: circ = self.streams[s.strm_id].pending_circ
+        # XXX: Figure out who to attribute this failure to
         if circ and circ.circ_id != s.circ_id:
           plog("WARN", str(s.strm_id) + " has mismatch of "
                 +str(s.circ_id)+" v "+str(circ.circ_id))
         if s.circ_id and s.circ_id not in self.circuits:
           plog("NOTICE", "Unknown circuit "+str(s.circ_id)
                 +" for stream "+str(s.strm_id))
+          PathBuilder.stream_status_event(self, s)
           return
       
       if s.status == "DETACHED":
