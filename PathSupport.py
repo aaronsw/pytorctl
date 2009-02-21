@@ -48,6 +48,7 @@ import copy
 import Queue
 import time
 import TorUtil
+import traceback
 from TorUtil import *
 
 __all__ = ["NodeRestrictionList", "PathRestrictionList",
@@ -958,6 +959,9 @@ class SelectionManager:
 
   def set_target(self, ip, port):
     "Called to update the ExitPolicyRestrictions with a new ip and port"
+    if self.exit_name[0:3] == "!up":
+      plog("WARN", "Requested target with non-up node: "+self.exit_name[4:])
+      raise NoNodesRemain()
     self.exit_rstr.del_restriction(ExitPolicyRestriction)
     self.exit_rstr.add_restriction(ExitPolicyRestriction(ip, port))
     if self.__ordered_exit_gen: self.__ordered_exit_gen.set_port(port)
@@ -978,6 +982,32 @@ class SelectionManager:
           self.exit_rstr.add_restriction(CountryRestriction(self.geoip_config.exit_country))
     # Need to rebuild exit generator
     self.path_selector.exit_gen.rebuild()
+
+  def rebuild_gens(self, sorted_r, router_map, nick_map):
+    exit_cleared = False
+    exit_id = None
+    if self.exit_name:
+      if self.exit_name[0] == '$':
+        exit_id = self.exit_name[1:]
+      elif self.exit_name in nick_map:
+        exit_id = nick_map[exit_id][1:]
+      if not exit_id or exit_id not in router_map or router_map[exit_id].down:
+        plog("NOTICE", "Clearing restriction on downed exit "+self.exit_name)
+        exit_cleared = True
+        self.exit_name = None
+        self.reconfigure(sorted_r)
+    try:
+      self.path_selector.rebuild_gens(sorted_r)
+    except NoNodesRemain:
+      traceback.print_exc()
+      plog("WARN", "Punting + Performing reconfigure..")
+      self.reconfigure(sorted_r)
+    if exit_cleared: 
+      # FIXME: This is a pretty ugly hack.. Basically we are forcing
+      # another NoNodesRemain via set_target if the user doesn't request a 
+      # new exit by then...
+      self.exit_name = "!up-"+str(exit_id)
+      self.exit_rstr.add_restriction(NickRestriction(self.exit_name))
 
 class Circuit:
   "Class to describe a circuit"
@@ -1357,11 +1387,11 @@ class PathBuilder(TorCtl.ConsensusTracker):
 
   def new_consensus_event(self, n):
     TorCtl.ConsensusTracker.new_consensus_event(self, n)
-    self.selmgr.path_selector.rebuild_gens(self.sorted_r)
+    self.selmgr.rebuild_gens(self.sorted_r, self.routers, self.name_to_key)
 
   def new_desc_event(self, d):
     if TorCtl.ConsensusTracker.new_desc_event(self, d):
-      self.selmgr.path_selector.rebuild_gens(self.sorted_r)
+      self.selmgr.rebuild_gens(self.sorted_r, self.routers, self.name_to_key)
 
   def bandwidth_event(self, b): pass # For heartbeat only..
 
