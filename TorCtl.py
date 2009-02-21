@@ -1094,7 +1094,8 @@ class ConsensusTracker(EventHandler):
     for i in removed_idhexes:
       if i not in self.routers: continue
       self.routers[i].down = True
-      self.routers[i].flags.remove("Running")
+      if "Running" in self.routers[i].flags:
+        self.routers[i].flags.remove("Running")
       if self.routers[i].refcount == 0:
         self.routers[i].deleted = True
         plog("INFO", "Expiring non-running router "+i)
