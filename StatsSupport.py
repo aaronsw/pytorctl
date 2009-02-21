@@ -41,6 +41,7 @@ import random
 import copy
 import time
 import math
+import traceback
 
 import TorUtil, PathSupport, TorCtl
 from TorUtil import *
@@ -523,9 +524,13 @@ class StatsHandler(PathSupport.PathBuilder):
       elif c.status == "EXTENDED":
         delta = c.arrived_at - self.circuits[c.circ_id].last_extended_at
         r_ext = c.path[-1]
-        if r_ext[0] != '$': r_ext = self.name_to_key[r_ext]
-        self.routers[r_ext[1:]].total_extend_time += delta
-        self.routers[r_ext[1:]].total_extended += 1
+        try:
+          if r_ext[0] != '$': r_ext = self.name_to_key[r_ext]
+          self.routers[r_ext[1:]].total_extend_time += delta
+          self.routers[r_ext[1:]].total_extended += 1
+        except KeyError, e:
+          traceback.print_exc()
+          plog("WARN", "No key "+str(e)+" for "+r_ext+" in dict:"+str(self.name_to_key))
       elif c.status == "FAILED":
         for r in self.circuits[c.circ_id].path: r.circ_chosen += 1
         

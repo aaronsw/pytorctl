@@ -1083,7 +1083,6 @@ class ConsensusTracker(EventHandler):
     self.name_to_key = {}
     self.RouterClass = RouterClass
     self.update_consensus()
-    self._read_routers(self.consensus.values())
 
   def _read_routers(self, nslist):
     old_idhexes = sets.Set(self.routers.keys())
@@ -1129,6 +1128,7 @@ class ConsensusTracker(EventHandler):
    
   def update_consensus(self):
     self._update_consensus(self.c.get_network_status())
+    self._read_routers(self.consensus.values())
 
   def new_consensus_event(self, n):
     self._update_consensus(n.nslist)
