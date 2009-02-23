@@ -1068,16 +1068,31 @@ class EventHandler:
     """
     raise NotImplemented()
 
+class Consensus:
+  """
+  A Consensus is a pickleable container for the members of
+  ConsensusTracker. This should only be used as a temporary 
+  reference, and will change after a NEWDESC or NEWCONSENUS event.
+  If you want a copy of a consensus that is independent
+  of subsequent updates, use copy.deepcopy()
+  """
+
+  def __init__(self, ns_map, sorted_r, router_map, nick_map):
+    self.ns_map = ns_map
+    self.sorted_r = sorted_r
+    self.routers = router_map
+    self.name_to_key = nick_map
+
 class ConsensusTracker(EventHandler):
   """
   A ConsensusTracker is an EventHandler that tracks the current
-  consensus of Tor in self.consensus, self.routers and self.sorted_r
+  consensus of Tor in self.ns_map, self.routers and self.sorted_r
   """
   def __init__(self, c, RouterClass=Router):
     EventHandler.__init__(self)
     c.set_event_handler(self)
     self.c = c
-    self.consensus = {}
+    self.ns_map = {}
     self.routers = {}
     self.sorted_r = []
     self.name_to_key = {}
@@ -1123,17 +1138,17 @@ class ConsensusTracker(EventHandler):
     for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
 
   def _update_consensus(self, nslist):
-    self.consensus = {}
+    self.ns_map = {}
     for n in nslist:
-      self.consensus[n.idhex] = n
+      self.ns_map[n.idhex] = n
    
   def update_consensus(self):
     self._update_consensus(self.c.get_network_status())
-    self._read_routers(self.consensus.values())
+    self._read_routers(self.ns_map.values())
 
   def new_consensus_event(self, n):
     self._update_consensus(n.nslist)
-    self._read_routers(self.consensus.values())
+    self._read_routers(self.ns_map.values())
     plog("DEBUG", "Read " + str(len(n.nslist))+" NC => " 
        + str(len(self.sorted_r)) + " routers")
  
@@ -1149,8 +1164,8 @@ class ConsensusTracker(EventHandler):
         plog("WARN", "Multiple descs for "+i+" after NEWDESC")
       r = r[0]
       ns = ns[0]
-      if r and r.idhex in self.consensus:
-        if ns.orhash != self.consensus[r.idhex].orhash:
+      if r and r.idhex in self.ns_map:
+        if ns.orhash != self.ns_map[r.idhex].orhash:
           plog("WARN", "Getinfo and consensus disagree for "+r.idhex)
           continue
         update = True
@@ -1166,6 +1181,9 @@ class ConsensusTracker(EventHandler):
        + str(len(self.sorted_r)) + " routers. Update: "+str(update))
     return update
 
+  def current_consensus(self):
+    return Consensus(self.ns_map, self.sorted_r, self.routers, 
+                     self.name_to_key)
 
 class DebugEventHandler(EventHandler):
   """Trivial debug event handler: reassembles all parsed events to stdout."""
