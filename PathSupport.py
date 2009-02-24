@@ -116,6 +116,10 @@ class NodeRestrictionList:
     self.restrictions = filter(
         lambda r: not isinstance(r, RestrictionClass),
           self.restrictions)
+  
+  def clear(self):
+    """ Remove all restrictions """
+    self.restrictions = []
 
   def __str__(self):
     return self.__class__.__name__+"("+str(map(str, self.restrictions))+")"
@@ -1044,12 +1048,12 @@ class SelectionManager(BaseSelectionManager):
   def set_exit(self, exit_name):
     # sets an exit, if bad, sets bad_exit
     exit_id = None
-    self.exit_rstr.del_restriction(IdHexRestriction)
+    self.exit_rstr.clear()
     if exit_name:
       if exit_name[0] == '$':
         exit_id = exit_name
       elif exit_name in self.consensus.name_to_key:
-        exit_id = self.consensus.name_to_key[exit_id]
+        exit_id = self.consensus.name_to_key[exit_name]
     self.exit_id = exit_id
     if not exit_id or exit_id[1:] not in self.consensus.routers \
             or self.consensus.routers[exit_id[1:]].down:
@@ -1452,7 +1456,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
         # traffic. 
         self.streams[s.strm_id].failed = True
         if s.circ_id in self.circuits: self.circuits[s.circ_id].dirty = True
-        if s.circ_id == 0 and s.reason == "TIMEOUT":
+        elif s.circ_id == 0 and s.reason == "TIMEOUT":
           plog("NOTICE", "Timeout for "+str(s.strm_id)) 
         else: plog("WARN","Failed stream on unknown circ "+str(s.circ_id))
         return
