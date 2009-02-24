@@ -965,6 +965,7 @@ class SelectionManager(BaseSelectionManager):
     )
 
     if self.exit_id:
+      self._set_exit(self.exit_id)
       plog("DEBUG", "Applying Setexit: "+self.exit_id)
       self.exit_rstr = NodeRestrictionList([IdHexRestriction(self.exit_id)])
     elif self.use_all_exits:
@@ -1045,22 +1046,25 @@ class SelectionManager(BaseSelectionManager):
          exitgen, self.path_rstr)
       return
 
-  def set_exit(self, exit_name):
+  def _set_exit(self, exit_name):
     # sets an exit, if bad, sets bad_exit
     exit_id = None
-    self.exit_rstr.clear()
     if exit_name:
       if exit_name[0] == '$':
         exit_id = exit_name
       elif exit_name in self.consensus.name_to_key:
         exit_id = self.consensus.name_to_key[exit_name]
     self.exit_id = exit_id
-    if not exit_id or exit_id[1:] not in self.consensus.routers \
-            or self.consensus.routers[exit_id[1:]].down:
-      plog("NOTICE", "Requested downed exit "+str(exit_id))
+
+  def set_exit(self, exit_name):
+    self._set_exit(exit_name)
+    self.exit_rstr.clear()
+    if not self.exit_id or self.exit_id[1:] not in self.consensus.routers \
+            or self.consensus.routers[self.exit_id[1:]].down:
+      plog("NOTICE", "Requested downed exit "+str(self.exit_id))
       self.bad_restrictions = True
     else:
-      self.exit_rstr.add_restriction(IdHexRestriction(exit_id))
+      self.exit_rstr.add_restriction(IdHexRestriction(self.exit_id))
       try:
         self.path_selector.exit_gen.rebuild()
         self.bad_restrictions = False

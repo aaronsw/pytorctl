@@ -3,6 +3,7 @@
 import struct
 import socket
 import TorCtl
+import StatsSupport
 
 from TorUtil import plog
 try:
@@ -86,7 +87,9 @@ def get_country_from_record(ip):
   if record != None:
     return record['country_code']
 
-class GeoIPRouter(TorCtl.Router):  
+class GeoIPRouter(TorCtl.Router):
+  # TODO: Its really shitty that this has to be a TorCtl.Router
+  # and can't be a StatsRouter..
   """ Router class extended to GeoIP """
   def __init__(self, router):
     self.__dict__ = router.__dict__
@@ -105,9 +108,10 @@ class GeoIPRouter(TorCtl.Router):
     return socket.inet_ntoa(struct.pack('>I', self.ip))
 
 class GeoIPConfig:
-  """ Class to configure GeoIP-based path building """		    
-  def __init__(self, unique_countries, continent_crossings, ocean_crossings,
-     entry_country, middle_country, exit_country, excludes): 
+  """ Class to configure GeoIP-based path building """
+  def __init__(self, unique_countries=None, continent_crossings=4,
+     ocean_crossings=None, entry_country=None, middle_country=None,
+     exit_country=None, excludes=None):
     # TODO: Somehow ensure validity of a configuration:
     #   - continent_crossings >= ocean_crossings
     #   - unique_countries=False --> continent_crossings!=None
