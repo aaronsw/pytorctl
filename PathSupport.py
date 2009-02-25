@@ -1059,15 +1059,15 @@ class SelectionManager(BaseSelectionManager):
   def set_exit(self, exit_name):
     self._set_exit(exit_name)
     self.exit_rstr.clear()
-    if not exit_id:
-      plog("NOTICE", "Requested null exit "+str(exit_id))
+    if not self.exit_id:
+      plog("NOTICE", "Requested null exit "+str(self.exit_id))
       self.bad_restrictions = True
-    elif exit_id[1:] not in self.consensus.routers:
-      plog("NOTICE", "Requested absent exit "+str(exit_id))
+    elif self.exit_id[1:] not in self.consensus.routers:
+      plog("NOTICE", "Requested absent exit "+str(self.exit_id))
       self.bad_restrictions = True
-    elif self.consensus.routers[exit_id[1:]].down:
-      e = self.consensus.routers[exit_id[1:]]
-      plog("NOTICE", "Requested downed exit "+str(exit_id)+" (bw: "+str(e.bw)+", flags: "+str(e.flags)+")")
+    elif self.consensus.routers[self.exit_id[1:]].down:
+      e = self.consensus.routers[self.exit_id[1:]]
+      plog("NOTICE", "Requested downed exit "+str(self.exit_id)+" (bw: "+str(e.bw)+", flags: "+str(e.flags)+")")
       self.bad_restrictions = True
     else:
       self.exit_rstr.add_restriction(IdHexRestriction(self.exit_id))
