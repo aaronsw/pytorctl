@@ -265,18 +265,20 @@ class Router:
         self.__dict__[i] =  copy.deepcopy(args[0].__dict__[i])
       return
     else:
-      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime) = args
+      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published) = args
     self.idhex = idhex
     self.nickname = name
     self.bw = bw
     self.exitpolicy = exitpolicy
-    self.flags = flags
+    self.flags = flags # Technicaly from NS doc
     self.down = down
     self.ip = struct.unpack(">I", socket.inet_aton(ip))[0]
     self.version = RouterVersion(version)
     self.os = os
     self.list_rank = 0 # position in a sorted list of routers.
     self.uptime = uptime
+    m = re.search(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)", published)
+    self.published = datetime.datetime(*map(int, m.groups()))
     self.refcount = 0 # How many open circs are we currently in?
     self.deleted = False # Has Tor already deleted this descriptor?
 
@@ -303,6 +305,7 @@ class Router:
     uptime = 0
     ip = 0
     router = "[none]"
+    published = "never"
 
     for line in desc:
       rt = re.search(r"^router (\S+) (\S+)", line)
@@ -312,6 +315,7 @@ class Router:
       rj = re.search(r"^reject (\S+):([^-]+)(?:-(\d+))?", line)
       bw = re.search(r"^bandwidth (\d+) \d+ (\d+)", line)
       up = re.search(r"^uptime (\d+)", line)
+      pb = re.search(r"^published (\S+ \S+)", line)
       if re.search(r"^opt hibernating 1", line):
         dead = True 
         if ("Running" in ns.flags):
@@ -328,6 +332,8 @@ class Router:
         uptime = int(up.group(1))
       elif rt:
         router,ip = rt.groups()
+      elif pb:
+        published = pb.group(1)
     if router != ns.nickname:
       plog("NOTICE", "Got different names " + ns.nickname + " vs " +
              router + " for " + ns.idhex)
@@ -337,7 +343,7 @@ class Router:
     if not version or not os:
       plog("INFO", "No version and/or OS for router " + ns.nickname)
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
-        ns.flags, ip, version, os, uptime)
+        ns.flags, ip, version, os, uptime, published)
   build_from_desc = Callable(build_from_desc)
 
   def update_to(self, new):
@@ -558,7 +564,7 @@ class Connection:
         raise TorCtlClosed() 
       line = line.strip()
       if self._debugFile:
-        self._debugFile.write("  %s\n" % line)
+        self._debugFile.write(str(time.time())+"\t  %s\n" % line)
       if len(line)<4:
         raise ProtocolError("Badly formatted reply line: Too short")
       code = line[:3]
@@ -595,7 +601,7 @@ class Connection:
       lines = amsg.split("\n")
       if len(lines) > 2:
         amsg = "\n".join(lines[:2]) + "\n"
-      self._debugFile.write(str(time.time())+">>> "+amsg)
+      self._debugFile.write(str(time.time())+"\t>>> "+amsg)
     self._s.write(msg)
 
   def sendAndRecv(self, msg="", expectedTypes=("250", "251")):
@@ -708,11 +714,12 @@ class Connection:
     desc = self.sendAndRecv("GETINFO desc/id/" + ns.idhex + "\r\n")[0][2]
     sig_start = desc.find("\nrouter-signature\n")+len("\nrouter-signature\n")
     fp_base64 = sha.sha(desc[:sig_start]).digest().encode("base64")[:-2]
+    r = Router.build_from_desc(desc.split("\n"), ns)
     if fp_base64 != ns.orhash:
-      plog("NOTICE", "Router descriptor for "+ns.idhex+" does not match ns fingerprint ("+ns.orhash+" vs "+fp_base64+")")
+      plog("NOTICE", "Router descriptor for "+ns.idhex+" does not match ns fingerprint (NS @ "+str(ns.updated)+" vs Desc @ "+str(r.published)+")")
       return None
     else:
-      return Router.build_from_desc(desc.split("\n"), ns)
+      return r
 
 
   def read_routers(self, nslist):
@@ -1100,11 +1107,18 @@ class ConsensusTracker(EventHandler):
     self.update_consensus()
 
   def _read_routers(self, nslist):
+    # Routers can fall out of our consensus five different ways:
+    # 1. Their descriptors disappear
+    # 2. Their NS documents disappear
+    # 3. They lose the Running flag
+    # 4. They list a bandwidth of 0
+    # 5. They have 'opt hibernating' set
+    routers = self.c.read_routers(nslist) # Sets .down if 3,4,5
     old_idhexes = sets.Set(self.routers.keys())
-    new_idhexes = sets.Set(map(lambda ns: ns.idhex, nslist))
+    new_idhexes = sets.Set(map(lambda r: r.idhex, routers)) 
     removed_idhexes = old_idhexes - new_idhexes
-    removed_idhexes.union_update(sets.Set(map(lambda ns: ns.idhex,
-                      filter(lambda ns: "Running" not in ns.flags, nslist))))
+    removed_idhexes.union_update(sets.Set(map(lambda r: r.idhex,
+                      filter(lambda r: r.down, routers))))
 
     for i in removed_idhexes:
       if i not in self.routers: continue
@@ -1119,7 +1133,6 @@ class ConsensusTracker(EventHandler):
         plog("INFO", "Postponing expiring non-running router "+i)
         self.routers[i].deleted = True
 
-    routers = self.c.read_routers(nslist)
     for r in routers:
       self.name_to_key[r.nickname] = "$"+r.idhex
       if r.idhex in self.routers:
