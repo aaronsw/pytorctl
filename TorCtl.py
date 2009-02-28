@@ -351,15 +351,9 @@ class Router:
     'new' """
     if self.idhex != new.idhex:
       plog("ERROR", "Update of router "+self.nickname+"changes idhex!")
-    self.idhex = new.idhex
-    self.nickname = new.nickname
-    self.bw = new.bw
-    self.exitpolicy = new.exitpolicy
-    self.flags = new.flags
-    self.ip = new.ip
-    self.version = new.version
-    self.os = new.os
-    self.uptime = new.uptime
+    for i in new.__dict__.iterkeys():
+      if i == "refcount": pass
+      self.__dict__[i] = new.__dict__[i]
 
   def will_exit_to(self, ip, port):
     """ Check the entire exitpolicy to see if the router will allow
@@ -1116,25 +1110,7 @@ class ConsensusTracker(EventHandler):
     routers = self.c.read_routers(nslist) # Sets .down if 3,4,5
     old_idhexes = sets.Set(self.routers.keys())
     new_idhexes = sets.Set(map(lambda r: r.idhex, routers)) 
-    removed_idhexes = old_idhexes - new_idhexes
-    removed_idhexes.union_update(sets.Set(map(lambda r: r.idhex,
-                      filter(lambda r: r.down, routers))))
-
-    for i in removed_idhexes:
-      if i not in self.routers: continue
-      self.routers[i].down = True
-      if "Running" in self.routers[i].flags:
-        self.routers[i].flags.remove("Running")
-      if self.routers[i].refcount == 0:
-        self.routers[i].deleted = True
-        plog("INFO", "Expiring non-running router "+i)
-        del self.routers[i]
-      else:
-        plog("INFO", "Postponing expiring non-running router "+i)
-        self.routers[i].deleted = True
-
     for r in routers:
-      self.name_to_key[r.nickname] = "$"+r.idhex
       if r.idhex in self.routers:
         if self.routers[r.idhex].nickname != r.nickname:
           plog("NOTICE", "Router "+r.idhex+" changed names from "
@@ -1146,14 +1122,47 @@ class ConsensusTracker(EventHandler):
         rc = self.RouterClass(r)
         self.routers[rc.idhex] = rc
 
+    removed_idhexes = old_idhexes - new_idhexes
+    removed_idhexes.union_update(sets.Set(map(lambda r: r.idhex,
+                      filter(lambda r: r.down, routers))))
+
+    for i in removed_idhexes:
+      if i not in self.routers: continue
+      self.routers[i].down = True
+      if "Running" in self.routers[i].flags:
+        self.routers[i].flags.remove("Running")
+      if self.routers[i].refcount == 0:
+        self.routers[i].deleted = True
+        if self.routers[i].__class__.__name__ == "StatsRouter":
+          plog("WARN", "Expiring non-running StatsRouter "+i)
+        else:
+          plog("INFO", "Expiring non-running router "+i)
+        del self.routers[i]
+      else:
+        plog("INFO", "Postponing expiring non-running router "+i)
+        self.routers[i].deleted = True
+
     self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
     self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
     for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
 
+    # XXX: Verification only. Can be removed.
+    self._sanity_check(self.sorted_r)
+
+  def _sanity_check(self, list):
+    downed =  filter(lambda r: r.down, list)
+    for d in downed:
+      plog("WARN", "Router "+d.idhex+" still present but is down. Del: "+str(d.deleted)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
+ 
+    deleted =  filter(lambda r: r.deleted, list)
+    for d in deleted:
+      plog("WARN", "Router "+d.idhex+" still present but is deleted. Down: "+str(d.down)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
+ 
   def _update_consensus(self, nslist):
     self.ns_map = {}
     for n in nslist:
       self.ns_map[n.idhex] = n
+      self.name_to_key[n.nickname] = "$"+n.idhex
    
   def update_consensus(self):
     self._update_consensus(self.c.get_network_status())
@@ -1177,6 +1186,7 @@ class ConsensusTracker(EventHandler):
         plog("WARN", "Multiple descs for "+i+" after NEWDESC")
       r = r[0]
       ns = ns[0]
+      self.name_to_key[ns.nickname] = "$"+ns.idhex
       if r and r.idhex in self.ns_map:
         if ns.orhash != self.ns_map[r.idhex].orhash:
           plog("WARN", "Getinfo and consensus disagree for "+r.idhex)

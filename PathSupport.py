@@ -1359,10 +1359,12 @@ class PathBuilder(TorCtl.ConsensusTracker):
       for r in circ.path:
         r.refcount -= 1
         if r.deleted and r.refcount == 0:
-          plog("INFO", "Removing expired descriptor for "+r.idhex)
-          self.sorted_r.remove(self.routers[r.idhex])
+          # XXX: This shouldn't happen with StatsRouters.. 
+          if r.__class__.__name__ == "StatsRouter":
+            plog("WARN", "Purging expired StatsRouter "+r.idhex)
+          else:
+            plog("INFO", "Purging expired router "+r.idhex)
           del self.routers[r.idhex]
-          for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
           self.selmgr.new_consensus(self.current_consensus())
       del self.circuits[c.circ_id]
       for stream in circ.pending_streams:
