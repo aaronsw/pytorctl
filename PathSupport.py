@@ -826,6 +826,7 @@ class PathSelector:
         ext = self.entry_gen.generate()
     for r in path:
       r.refcount += 1
+      plog("DEBUG", "Circ refcount "+str(r.refcount)+" for "+r.idhex)
     return path
 
 # TODO: Implement example manager.
@@ -1068,6 +1069,10 @@ class SelectionManager(BaseSelectionManager):
     elif self.consensus.routers[self.exit_id[1:]].down:
       e = self.consensus.routers[self.exit_id[1:]]
       plog("NOTICE", "Requested downed exit "+str(self.exit_id)+" (bw: "+str(e.bw)+", flags: "+str(e.flags)+")")
+      self.bad_restrictions = True
+    elif self.consensus.routers[self.exit_id[1:]].deleted:
+      e = self.consensus.routers[self.exit_id[1:]]
+      plog("NOTICE", "Requested deleted exit "+str(self.exit_id)+" (bw: "+str(e.bw)+", flags: "+str(e.flags)+", Down: "+str(e.down)+", ref: "+str(e.refcount)+")")
       self.bad_restrictions = True
     else:
       self.exit_rstr.add_restriction(IdHexRestriction(self.exit_id))
@@ -1323,15 +1328,20 @@ class PathBuilder(TorCtl.ConsensusTracker):
         self.last_exit = None
         # Kill this stream
         plog("NOTICE", "Closing impossible stream "+str(stream.strm_id)+" ("+str(e)+")")
-        self.c.close_stream(stream.strm_id, "4") # END_STREAM_REASON_EXITPOLICY
+        try:
+          self.c.close_stream(stream.strm_id, "4") # END_STREAM_REASON_EXITPOLICY
+        except TorCtl.ErrorReply, e:
+          plog("WARN", "Error closing stream: "+str(e))
         return
       except TorCtl.ErrorReply, e:
         plog("WARN", "Error building circ: "+str(e.args))
         self.last_exit = None
         # Kill this stream
         plog("NOTICE", "Closing stream "+str(stream.strm_id))
-        # END_STREAM_REASON_DESTROY
-        self.c.close_stream(stream.strm_id, "5") 
+        try:
+          self.c.close_stream(stream.strm_id, "5") # END_STREAM_REASON_DESTROY
+        except TorCtl.ErrorReply, e:
+          plog("WARN", "Error closing stream: "+str(e))
         return
       for u in unattached_streams:
         plog("DEBUG",
@@ -1358,6 +1368,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
       circ = self.circuits[c.circ_id]
       for r in circ.path:
         r.refcount -= 1
+        plog("DEBUG", "Close refcount "+str(r.refcount)+" for "+r.idhex)
         if r.deleted and r.refcount == 0:
           # XXX: This shouldn't happen with StatsRouters.. 
           if r.__class__.__name__ == "StatsRouter":

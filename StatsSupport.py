@@ -196,6 +196,7 @@ class StatsRouter(TorCtl.Router):
     # StatsRouters should not be destroyed when Tor forgets about them
     # Give them an extra refcount:
     self.refcount += 1
+    plog("DEBUG", "Stats refcount "+str(self.refcount)+" for "+self.idhex)
   
   def reset(self):
     "Reset all stats on this Router"

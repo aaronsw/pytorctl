@@ -351,9 +351,11 @@ class Router:
     'new' """
     if self.idhex != new.idhex:
       plog("ERROR", "Update of router "+self.nickname+"changes idhex!")
+    plog("DEBUG", "Updating refcount "+str(self.refcount)+" for "+self.idhex)
     for i in new.__dict__.iterkeys():
-      if i == "refcount": pass
+      if i == "refcount": continue
       self.__dict__[i] = new.__dict__[i]
+    plog("DEBUG", "Updated refcount "+str(self.refcount)+" for "+self.idhex)
 
   def will_exit_to(self, ip, port):
     """ Check the entire exitpolicy to see if the router will allow
@@ -1157,6 +1159,10 @@ class ConsensusTracker(EventHandler):
     deleted =  filter(lambda r: r.deleted, list)
     for d in deleted:
       plog("WARN", "Router "+d.idhex+" still present but is deleted. Down: "+str(d.down)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
+
+    zero =  filter(lambda r: r.refcount == 0 and r.__class__.__name__ == "StatsRouter", list)
+    for d in zero:
+      plog("WARN", "Router "+d.idhex+" has refcount 0. Del:"+str(d.deleted)+", Down: "+str(d.down)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
  
   def _update_consensus(self, nslist):
     self.ns_map = {}
@@ -1202,6 +1208,8 @@ class ConsensusTracker(EventHandler):
       for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
     plog("DEBUG", "Read " + str(len(d.idlist))+" ND => " 
        + str(len(self.sorted_r)) + " routers. Update: "+str(update))
+    # XXX: Verification only. Can be removed.
+    self._sanity_check(self.sorted_r)
     return update
 
   def current_consensus(self):
