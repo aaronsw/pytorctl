@@ -1315,7 +1315,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
           except TorCtl.ErrorReply, e:
             # No need to retry here. We should get the failed
             # event for either the circ or stream next
-            plog("WARN", "Error attaching stream: "+str(e.args))
+            plog("WARN", "Error attaching new stream: "+str(e.args))
             return
           break
     else:
@@ -1379,8 +1379,12 @@ class PathBuilder(TorCtl.ConsensusTracker):
           self.selmgr.new_consensus(self.current_consensus())
       del self.circuits[c.circ_id]
       for stream in circ.pending_streams:
-        plog("DEBUG", "Finding new circ for " + str(stream.strm_id))
-        self.attach_stream_any(stream, stream.detached_from)
+        # If it was built, let Tor decide to detach or fail the stream
+        if not circ.built:
+          plog("DEBUG", "Finding new circ for " + str(stream.strm_id))
+          self.attach_stream_any(stream, stream.detached_from)
+        else:
+          plog("NOTICE", "Waiting on Tor to hint about stream "+str(stream.strm_id)+" on closed circ "+str(circ.circ_id))
     elif c.status == "BUILT":
       self.circuits[c.circ_id].built = True
       try:
@@ -1388,8 +1392,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
           self.c.attach_stream(stream.strm_id, c.circ_id)
       except TorCtl.ErrorReply, e:
         # No need to retry here. We should get the failed
-        # event for either the circ or stream next
-        plog("WARN", "Error attaching stream: "+str(e.args))
+        # event for either the circ or stream in the next event
+        plog("NOTICE", "Error attaching pending stream: "+str(e.args))
         return
 
   def stream_status_event(self, s):
@@ -1427,8 +1431,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
                       s.target_port, "NEW")
       # FIXME Stats (differentiate Resolved streams also..)
       if not s.circ_id:
-        if s.reason == "TIMEOUT":
-          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with timeout.")
+        if s.reason == "TIMEOUT" or s.reason == "EXITPOLICY":
+          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with "+s.reason)
         else:
           plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
       else:
@@ -1467,10 +1471,10 @@ class PathBuilder(TorCtl.ConsensusTracker):
 
       # XXX: Can happen on timeout
       if not s.circ_id:
-        if s.reason == "TIMEOUT":
-          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with timeout.")
+        if s.reason == "TIMEOUT" or s.reason == "EXITPOLICY":
+          plog("NOTICE", "Stream "+str(s.strm_id)+" "+s.status+" with "+s.reason)
         else:
-          plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
+          plog("WARN", "Stream "+str(s.strm_id)+" "+s.status+" from no circuit with reason: "+str(s.reason))
 
       # We get failed and closed for each stream. OK to return 
       # and let the closed do the cleanup
@@ -1479,9 +1483,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
         # traffic. 
         self.streams[s.strm_id].failed = True
         if s.circ_id in self.circuits: self.circuits[s.circ_id].dirty = True
-        elif s.circ_id == 0 and s.reason == "TIMEOUT":
-          plog("NOTICE", "Timeout for "+str(s.strm_id)) 
-        else: plog("WARN","Failed stream on unknown circ "+str(s.circ_id))
+        elif s.circ_id != 0: 
+          plog("WARN", "Failed stream "+str(s.strm_id)+" on unknown circ "+str(s.circ_id))
         return
 
       if self.streams[s.strm_id].pending_circ:

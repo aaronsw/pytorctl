@@ -622,8 +622,8 @@ class StatsHandler(PathSupport.PathBuilder):
         # XXX: REMAPs can do this (normal). Also REASON=DESTROY (bug?)
         # XXX: Timeouts should count failure on the pending circ instead 
         # of returning..
-        if s.reason == "TIMEOUT":
-          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with timeout.")
+        if s.reason == "TIMEOUT" or s.reason == "EXITPOLICY":
+          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with "+s.reason)
         else:
           plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
         PathBuilder.stream_status_event(self, s)
