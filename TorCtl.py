@@ -431,9 +431,13 @@ class Connection:
       except TorCtlClosed:
         plog("NOTICE", "Tor closed control connection. Exiting event thread.")
         return
-      except:
+      except Exception,e:
         if not self._closed:
-          self._err(sys.exc_info())
+          if sys:
+            self._err(sys.exc_info())
+          else:
+            plog("NOTICE", "No sys left at exception shutdown: "+str(e))
+            self._err((e.__class__, e, None))
           return
         else:
 		  isEvent = 0

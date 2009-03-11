@@ -173,8 +173,8 @@ class NodeGenerator:
     "Rewind the generator to the 'beginning'"
     self.routers = copy.copy(self.rstr_routers)
     if not self.routers:
-      plog("WARN", "No routers left after restrictions applied: "+str(self.rstr_list))
-      raise NoNodesRemain()
+      plog("NOTICE", "No routers left after restrictions applied: "+str(self.rstr_list))
+      raise NoNodesRemain(str(self.rstr_list))
  
   def rebuild(self, sorted_r=None):
     """ Extra step to be performed when new routers are added or when
@@ -183,8 +183,8 @@ class NodeGenerator:
       self.sorted_r = sorted_r
     self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
     if not self.rstr_routers:
-      plog("WARN", "No routers left after restrictions applied: "+str(self.rstr_list))
-      raise NoNodesRemain()
+      plog("NOTICE", "No routers left after restrictions applied: "+str(self.rstr_list))
+      raise NoNodesRemain(str(self.rstr_list))
 
   def mark_chosen(self, r):
     """Mark a router as chosen: remove it from the list of routers 
@@ -1086,16 +1086,14 @@ class SelectionManager(BaseSelectionManager):
 
   def new_consensus(self, consensus):
     self.consensus = consensus
-    if self.exit_id:
-      self.set_exit(self.exit_id)
-    if self.bad_restrictions:
-      return
     try:
       self.path_selector.rebuild_gens(self.consensus.sorted_r)
+      if self.exit_id:
+        self.set_exit(self.exit_id)
     except NoNodesRemain:
-      traceback.print_exc()
-      plog("WARN", "No viable nodes in consensus. Punting + performing reconfigure..")
-      self.reconfigure()
+      plog("NOTICE", "No viable nodes in consensus for restrictions.")
+      # Punting + performing reconfigure..")
+      #self.reconfigure(consensus)
 
   def set_target(self, ip, port):
     # sets an exit policy, if bad, rasies exception..
@@ -1327,7 +1325,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
         # XXX: Dress this up a bit
         self.last_exit = None
         # Kill this stream
-        plog("NOTICE", "Closing impossible stream "+str(stream.strm_id)+" ("+str(e)+")")
+        plog("WARN", "Closing impossible stream "+str(stream.strm_id)+" ("+str(e)+")")
         try:
           self.c.close_stream(stream.strm_id, "4") # END_STREAM_REASON_EXITPOLICY
         except TorCtl.ErrorReply, e:
