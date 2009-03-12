@@ -243,6 +243,13 @@ class StatsRouter(TorCtl.Router):
     if bw == 0.0: return 0
     else: return self.bw/(1024.*bw)
 
+  def strm_ratio(self):
+    """Return the ratio of the Router's stream capacity to the average
+       stream capacity passed in as 'mean'"""
+    bw = self.bwstats.mean
+    if StatsRouter.global_mean == 0.0: return 0
+    else: return (1.0*bw)/StatsRouter.global_mean
+
   def current_uptime(self):
     if self.became_active_at:
       ret = (self.total_active_uptime+(time.time()-self.became_active_at))
@@ -277,12 +284,14 @@ class StatsRouter(TorCtl.Router):
     return (3600.*(self.circ_succeeded+self.strm_succeeded))/self.current_uptime()
   
   key = """Metatroller Statistics:
-  CC=Circuits Chosen   CF=Circuits Failed     CS=Circuit Suspected
-  SC=Streams Chosen    SF=Streams Failed      SS=Streams Suspected
-  FH=Failed per Hour   SH=Suspected per Hour  ET=avg circuit Extend Time (s)
-  EB=mean BW (K)       BD=BW std Dev (K)      BR=Ratio of observed to avg BW
-  ZB=BW z-test value   PB=Probability(z-bw)   ZR=Ratio z-test value
-  PR=Prob(z-ratio)     U=Uptime (h)\n"""
+  CC=Circuits Chosen   CF=Circuits Failed      CS=Circuit Suspected
+  SC=Streams Chosen    SF=Streams Failed       SS=Streams Suspected
+  FH=Failed per Hour   SH=Suspected per Hour   ET=avg circuit Extend Time (s)
+  EB=mean BW (K)       BD=BW std Dev (K)       BR=Ratio of observed to avg BW
+  ZB=BW z-test value   PB=Probability(z-bw)    ZR=Ratio z-test value
+  PR=Prob(z-ratio)     SR=Global mean/mean BW  U=Uptime (h)\n"""
+
+  global_mean = 0.0
 
   def __str__(self):
     return (self.idhex+" ("+self.nickname+")\n"
@@ -302,6 +311,7 @@ class StatsRouter(TorCtl.Router):
       +" BR="+str(round(self.bw_ratio(),1))
       +" ZR="+str(round(self.z_ratio,1))
       +" PR="+(str(round(self.prob_zr,3))[1:])
+      +" SR="+(str(round(self.strm_ratio(),1)))
       +" U="+str(round(self.current_uptime()/3600, 1))+"\n")
 
   def sanity_check(self):
@@ -431,6 +441,8 @@ class StatsHandler(PathSupport.PathBuilder):
     (avg, dev) = self.run_zrtest()
     f.write("BW ratio stats: u="+str(round(avg,1))+" s="+str(round(dev,1))+"\n")
 
+    StatsRouter.global_mean = avg
+
     # Circ, strm infoz
     f.write("Circ failure ratio: "+str(self.circ_failed)
             +"/"+str(self.circ_count)+"\n")
@@ -452,6 +464,11 @@ class StatsHandler(PathSupport.PathBuilder):
     bw_rate = copy.copy(self.sorted_r)
     bw_rate.sort(lambda x, y: cmp(y.bw_ratio(), x.bw_ratio()))
     self.write_routers(f, bw_rate, "Bandwidth Ratios")
+
+    # sort+print by bandwidth
+    strm_ratio = copy.copy(self.sorted_r)
+    strm_ratio.sort(lambda x, y: cmp(x.strm_ratio(), y.strm_ratio()))
+    self.write_routers(f, strm_ratio, "Stream Ratios")
 
     failed = copy.copy(self.sorted_r)
     failed.sort(lambda x, y:
