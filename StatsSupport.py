@@ -243,12 +243,28 @@ class StatsRouter(TorCtl.Router):
     if bw == 0.0: return 0
     else: return self.bw/(1024.*bw)
 
-  def strm_ratio(self):
+  def strm_bw_ratio(self):
     """Return the ratio of the Router's stream capacity to the average
        stream capacity passed in as 'mean'"""
     bw = self.bwstats.mean
     if StatsRouter.global_mean == 0.0: return 0
     else: return (1.0*bw)/StatsRouter.global_mean
+
+  def circ_fail_ratio(self):
+    if self.circ_chosen == 0: return 0
+    return (1.0*self.circ_failed)/self.circ_chosen
+
+  def strm_fail_ratio(self):
+    if self.strm_chosen == 0: return 0
+    return (1.0*self.strm_failed)/self.strm_chosen
+
+  def circ_succeed_ratio(self):
+    if self.circ_chosen == 0: return 1
+    return (1.0*(self.circ_succeeded))/self.circ_chosen
+
+  def strm_succeed_ratio(self):
+    if self.strm_chosen == 0: return 1
+    return (1.0*(self.strm_succeeded))/self.strm_chosen
 
   def current_uptime(self):
     if self.became_active_at:
@@ -311,7 +327,7 @@ class StatsRouter(TorCtl.Router):
       +" BR="+str(round(self.bw_ratio(),1))
       +" ZR="+str(round(self.z_ratio,1))
       +" PR="+(str(round(self.prob_zr,3))[1:])
-      +" SR="+(str(round(self.strm_ratio(),1)))
+      +" SR="+(str(round(self.strm_bw_ratio(),1)))
       +" U="+str(round(self.current_uptime()/3600, 1))+"\n")
 
   def sanity_check(self):
@@ -411,23 +427,41 @@ class StatsHandler(PathSupport.PathBuilder):
     for r in rlist:
       # only print it if we've used it.
       if r.circ_chosen+r.strm_chosen > 0: f.write(str(r))
-
+  
+  def write_ratios(self, filename):
+    "Write out bandwith ratio stats StatsHandler has gathered"
+    plog("DEBUG", "Writing ratios to "+filename)
+    f = file(filename, "w")
+    (avg, dev) = self.run_zbtest()
+    StatsRouter.global_mean = avg
+    strm_bw_ratio = copy.copy(self.sorted_r)
+    strm_bw_ratio.sort(lambda x, y: cmp(x.strm_bw_ratio(), y.strm_bw_ratio()))
+    for r in strm_bw_ratio:
+      if r.circ_chosen == 0: continue
+      f.write(r.idhex+"="+r.nickname+"\n  ")
+      f.write("SR="+str(round(r.strm_bw_ratio(),4))+" BR="+str(round(r.bw_ratio(),4))+" CSR="+str(round(r.circ_succeed_ratio(),4))+" SSR="+str(round(r.strm_succeed_ratio(),4))+" CFR="+str(round(1-r.circ_fail_ratio(),4))+" SFR="+str(round(1-r.strm_fail_ratio(),4))+"\n")
+    f.close()
+ 
   def write_stats(self, filename):
     "Write out all the statistics the StatsHandler has gathered"
     # TODO: all this shit should be configurable. Some of it only makes
     # sense when scanning in certain modes.
-    plog("DEBUG", "Writing stats")
+    plog("DEBUG", "Writing stats to "+filename)
     # Sanity check routers
     for r in self.sorted_r: r.sanity_check()
 
     # Sanity check the router reason lists.
     for r in self.sorted_r:
       for rsn in r.reason_failed:
-        if r not in self.failed_reasons[rsn].rlist:
-          plog("ERROR", "Router missing from reason table")
+        if rsn not in self.failed_reasons:
+          plog("ERROR", "Router "+r.idhex+" w/o reason "+rsn+" in fail table")
+        elif r not in self.failed_reasons[rsn].rlist:
+          plog("ERROR", "Router "+r.idhex+" missing from fail table")
       for rsn in r.reason_suspected:
-        if r not in self.suspect_reasons[rsn].rlist:
-          plog("ERROR", "Router missing from reason table")
+        if rsn not in self.suspect_reasons:
+          plog("ERROR", "Router "+r.idhex+" w/o reason "+rsn+" in fail table") 
+        elif r not in self.suspect_reasons[rsn].rlist:
+          plog("ERROR", "Router "+r.idhex+" missing from suspect table")
 
     # Sanity check the lists the other way
     for rsn in self.failed_reasons.itervalues(): rsn._verify_failed()
@@ -437,11 +471,11 @@ class StatsHandler(PathSupport.PathBuilder):
     f.write(StatsRouter.key)
     (avg, dev) = self.run_zbtest()
     f.write("\n\nBW stats: u="+str(round(avg,1))+" s="+str(round(dev,1))+"\n")
+    StatsRouter.global_mean = avg
 
     (avg, dev) = self.run_zrtest()
     f.write("BW ratio stats: u="+str(round(avg,1))+" s="+str(round(dev,1))+"\n")
 
-    StatsRouter.global_mean = avg
 
     # Circ, strm infoz
     f.write("Circ failure ratio: "+str(self.circ_failed)
@@ -466,9 +500,9 @@ class StatsHandler(PathSupport.PathBuilder):
     self.write_routers(f, bw_rate, "Bandwidth Ratios")
 
     # sort+print by bandwidth
-    strm_ratio = copy.copy(self.sorted_r)
-    strm_ratio.sort(lambda x, y: cmp(x.strm_ratio(), y.strm_ratio()))
-    self.write_routers(f, strm_ratio, "Stream Ratios")
+    strm_bw_ratio = copy.copy(self.sorted_r)
+    strm_bw_ratio.sort(lambda x, y: cmp(x.strm_bw_ratio(), y.strm_bw_ratio()))
+    self.write_routers(f, strm_bw_ratio, "Stream Ratios")
 
     failed = copy.copy(self.sorted_r)
     failed.sort(lambda x, y:
