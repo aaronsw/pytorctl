@@ -228,6 +228,12 @@ class StatsRouter(TorCtl.Router):
     self.prob_zr = 0
     self.z_bw = 0
     self.prob_zb = 0
+    self.rank_history = []
+    self.bw_history = []
+
+  def was_used(self):
+    """Return True if this router was used in this round"""
+    return self.circ_chosen != 0
 
   def avg_extend_time(self):
     """Return the average amount of time it took for this router
@@ -243,12 +249,30 @@ class StatsRouter(TorCtl.Router):
     if bw == 0.0: return 0
     else: return self.bw/(1024.*bw)
 
+  def adv_ratio(self): # XXX
+    """Return the ratio of the Router's advertised bandwidth to 
+       the overall average observed bandwith"""
+    bw = StatsRouter.global_bw_mean
+    if bw == 0.0: return 0
+    else: return self.bw/bw
+
+  def avg_rank(self):
+    if not self.rank_history: return self.list_rank
+    return (1.0*sum(self.rank_history))/len(self.rank_history)
+
+  def bw_ratio_ratio(self):
+    bwr = self.bw_ratio()
+    if bwr == 0.0: return 0
+    # (avg_reported_bw/our_reported_bw) *
+    # (our_stream_capacity/avg_stream_capacity)
+    return StatsRouter.global_ratio_mean/bwr 
+
   def strm_bw_ratio(self):
     """Return the ratio of the Router's stream capacity to the average
        stream capacity passed in as 'mean'"""
     bw = self.bwstats.mean
-    if StatsRouter.global_mean == 0.0: return 0
-    else: return (1.0*bw)/StatsRouter.global_mean
+    if StatsRouter.global_strm_mean == 0.0: return 0
+    else: return (1.0*bw)/StatsRouter.global_strm_mean
 
   def circ_fail_ratio(self):
     if self.circ_chosen == 0: return 0
@@ -299,7 +323,7 @@ class StatsRouter(TorCtl.Router):
   def _succeeded_per_hour(self):
     return (3600.*(self.circ_succeeded+self.strm_succeeded))/self.current_uptime()
   
-  key = """Metatroller Statistics:
+  key = """Metatroller Router Statistics:
   CC=Circuits Chosen   CF=Circuits Failed      CS=Circuit Suspected
   SC=Streams Chosen    SF=Streams Failed       SS=Streams Suspected
   FH=Failed per Hour   SH=Suspected per Hour   ET=avg circuit Extend Time (s)
@@ -307,7 +331,11 @@ class StatsRouter(TorCtl.Router):
   ZB=BW z-test value   PB=Probability(z-bw)    ZR=Ratio z-test value
   PR=Prob(z-ratio)     SR=Global mean/mean BW  U=Uptime (h)\n"""
 
-  global_mean = 0.0
+  global_strm_mean = 0.0
+  global_strm_dev = 0.0
+  global_ratio_mean = 0.0
+  global_ratio_dev = 0.0
+  global_bw_mean = 0.0
 
   def __str__(self):
     return (self.idhex+" ("+self.nickname+")\n"
@@ -368,7 +396,7 @@ class StatsRouter(TorCtl.Router):
 class StatsHandler(PathSupport.PathBuilder):
   """An extension of PathSupport.PathBuilder that keeps track of 
      router statistics for every circuit and stream"""
-  def __init__(self, c, slmgr, RouterClass=StatsRouter):
+  def __init__(self, c, slmgr, RouterClass=StatsRouter, track_ranks=False):
     PathBuilder.__init__(self, c, slmgr, RouterClass)
     self.circ_count = 0
     self.strm_count = 0
@@ -377,7 +405,9 @@ class StatsHandler(PathSupport.PathBuilder):
     self.circ_succeeded = 0
     self.failed_reasons = {}
     self.suspect_reasons = {}
+    self.track_ranks = track_ranks
 
+  # XXX: Shit, all this stuff should be slice-based
   def run_zbtest(self): # Unweighted z-test
     """Run unweighted z-test to calculate the probabilities of a node
        having a given stream bandwidth based on the Normal distribution"""
@@ -413,6 +443,13 @@ class StatsHandler(PathSupport.PathBuilder):
         r.prob_zr = TorUtil.zprob(-r.z_ratio)
     return (avg, stddev)
 
+  def avg_adv_bw(self):
+    n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
+    if n == 0: return (0, 0)
+    avg = reduce(lambda x, y: x+y.bw, 
+            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+    return avg 
+
   def write_reasons(self, f, reasons, name):
     "Write out all the failure reasons and statistics for all Routers"
     f.write("\n\n\t----------------- "+name+" -----------------\n")
@@ -427,19 +464,35 @@ class StatsHandler(PathSupport.PathBuilder):
     for r in rlist:
       # only print it if we've used it.
       if r.circ_chosen+r.strm_chosen > 0: f.write(str(r))
+
+  # FIXME: Maybe move this two up into StatsRouter too?
+  ratio_key = """Metatroller Ratio Statistics:
+  SR=Stream avg ratio     AR=Advertized bw ratio    BRR=Adv. bw avg ratio
+  CSR=Circ success ratio  SSR=Stream success ratio  CFR=Circ Fail Ratio
+  SFR=Stream fail ratio   CC=Circuit Count          SC=Stream Count
+  P=Percentile Rank       U=Uptime (h)\n"""
   
   def write_ratios(self, filename):
     "Write out bandwith ratio stats StatsHandler has gathered"
     plog("DEBUG", "Writing ratios to "+filename)
     f = file(filename, "w")
+    f.write(StatsHandler.ratio_key)
+
     (avg, dev) = self.run_zbtest()
-    StatsRouter.global_mean = avg
+    StatsRouter.global_strm_mean = avg
+    StatsRouter.global_strm_dev = dev
+    (avg, dev) = self.run_zrtest()
+    StatsRouter.global_ratio_mean = avg
+    StatsRouter.global_ratio_dev = dev
+
+    StatsRouter.global_bw_mean = self.avg_adv_bw()
+
     strm_bw_ratio = copy.copy(self.sorted_r)
     strm_bw_ratio.sort(lambda x, y: cmp(x.strm_bw_ratio(), y.strm_bw_ratio()))
     for r in strm_bw_ratio:
       if r.circ_chosen == 0: continue
       f.write(r.idhex+"="+r.nickname+"\n  ")
-      f.write("SR="+str(round(r.strm_bw_ratio(),4))+" BR="+str(round(r.bw_ratio(),4))+" CSR="+str(round(r.circ_succeed_ratio(),4))+" SSR="+str(round(r.strm_succeed_ratio(),4))+" CFR="+str(round(1-r.circ_fail_ratio(),4))+" SFR="+str(round(1-r.strm_fail_ratio(),4))+"\n")
+      f.write("SR="+str(round(r.strm_bw_ratio(),4))+" AR="+str(round(r.adv_ratio(), 4))+" BRR="+str(round(r.bw_ratio_ratio(),4))+" CSR="+str(round(r.circ_succeed_ratio(),4))+" SSR="+str(round(r.strm_succeed_ratio(),4))+" CFR="+str(round(r.circ_fail_ratio(),4))+" SFR="+str(round(r.strm_fail_ratio(),4))+" CC="+str(r.circ_chosen)+" SC="+str(r.strm_chosen)+" U="+str(round(r.current_uptime()/3600,1))+" P="+str(round((100.0*r.avg_rank())/len(self.sorted_r),1))+"\n")
     f.close()
  
   def write_stats(self, filename):
@@ -470,10 +523,13 @@ class StatsHandler(PathSupport.PathBuilder):
     f = file(filename, "w")
     f.write(StatsRouter.key)
     (avg, dev) = self.run_zbtest()
+    StatsRouter.global_strm_mean = avg
+    StatsRouter.global_strm_dev = dev
     f.write("\n\nBW stats: u="+str(round(avg,1))+" s="+str(round(dev,1))+"\n")
-    StatsRouter.global_mean = avg
 
     (avg, dev) = self.run_zrtest()
+    StatsRouter.global_ratio_mean = avg
+    StatsRouter.global_ratio_dev = dev
     f.write("BW ratio stats: u="+str(round(avg,1))+" s="+str(round(dev,1))+"\n")
 
 
@@ -749,6 +805,15 @@ class StatsHandler(PathSupport.PathBuilder):
       r.hibernated_at = 0
 
   def new_consensus_event(self, n):
+    if self.track_ranks:
+      # Record previous rank and history.
+      for ns in n.nslist:
+        if not ns.idhex in self.routers:
+          continue
+        r = self.routers[ns.idhex]
+        r.bw_history.append(r.bw)
+      for r in self.sorted_r:
+        r.rank_history.append(r.list_rank)
     PathBuilder.new_consensus_event(self, n)
     now = n.arrived_at
     for ns in n.nslist:
