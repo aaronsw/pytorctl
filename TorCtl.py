@@ -1187,8 +1187,13 @@ class ConsensusTracker(EventHandler):
   def new_desc_event(self, d):
     update = False
     for i in d.idlist:
-      ns = self.c.get_network_status("id/"+i)
-      r = self.c.read_routers(ns)
+      r = None
+      try:
+        ns = self.c.get_network_status("id/"+i)
+        r = self.c.read_routers(ns)
+      except ErrorReply, e:
+        plog("WARN", "Error reply for "+i+" after NEWDESC: "+str(e))
+        continue
       if not r:
         plog("WARN", "No router desc for "+i+" after NEWDESC")
         continue
