@@ -265,7 +265,7 @@ class Router:
         self.__dict__[i] =  copy.deepcopy(args[0].__dict__[i])
       return
     else:
-      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published) = args
+      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published, contact) = args
     self.idhex = idhex
     self.nickname = name
     self.bw = bw
@@ -281,6 +281,7 @@ class Router:
     self.published = datetime.datetime(*map(int, m.groups()))
     self.refcount = 0 # How many open circs are we currently in?
     self.deleted = False # Has Tor already deleted this descriptor?
+    self.contact = contact
 
   def __str__(self):
     s = self.idhex, self.nickname
@@ -306,6 +307,7 @@ class Router:
     ip = 0
     router = "[none]"
     published = "never"
+    contact = None
 
     for line in desc:
       rt = re.search(r"^router (\S+) (\S+)", line)
@@ -315,6 +317,7 @@ class Router:
       rj = re.search(r"^reject (\S+):([^-]+)(?:-(\d+))?", line)
       bw = re.search(r"^bandwidth (\d+) \d+ (\d+)", line)
       up = re.search(r"^uptime (\d+)", line)
+      ct = re.search(r"^contact (.+)", line)
       pb = re.search(r"^published (\S+ \S+)", line)
       if re.search(r"^opt hibernating 1", line):
         dead = True 
@@ -334,6 +337,8 @@ class Router:
         router,ip = rt.groups()
       elif pb:
         published = pb.group(1)
+      elif ct:
+        contact = ct.group(1)
     if router != ns.nickname:
       plog("NOTICE", "Got different names " + ns.nickname + " vs " +
              router + " for " + ns.idhex)
@@ -343,7 +348,7 @@ class Router:
     if not version or not os:
       plog("INFO", "No version and/or OS for router " + ns.nickname)
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
-        ns.flags, ip, version, os, uptime, published)
+        ns.flags, ip, version, os, uptime, published, contact)
   build_from_desc = Callable(build_from_desc)
 
   def update_to(self, new):
