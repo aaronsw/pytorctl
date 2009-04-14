@@ -173,7 +173,7 @@ class BandwidthStats:
 
   def add_bw(self, bytes, duration):
     "Add an observed transfer of 'bytes' for 'duration' seconds"
-    if not bytes: plog("WARN", "No bytes for bandwidth")
+    if not bytes: plog("NOTICE", "No bytes for bandwidth")
     bytes /= 1024.
     self.byte_list.append(bytes)
     self.duration_list.append(duration)
@@ -274,21 +274,33 @@ class StatsRouter(TorCtl.Router):
     if StatsRouter.global_strm_mean == 0.0: return 0
     else: return (1.0*bw)/StatsRouter.global_strm_mean
 
-  def circ_fail_ratio(self):
+  def circ_fail_rate(self):
     if self.circ_chosen == 0: return 0
     return (1.0*self.circ_failed)/self.circ_chosen
 
-  def strm_fail_ratio(self):
+  def strm_fail_rate(self):
     if self.strm_chosen == 0: return 0
     return (1.0*self.strm_failed)/self.strm_chosen
 
-  def circ_succeed_ratio(self):
+  def circ_succeed_rate(self):
     if self.circ_chosen == 0: return 1
     return (1.0*(self.circ_succeeded))/self.circ_chosen
 
-  def strm_succeed_ratio(self):
+  def strm_succeed_rate(self):
     if self.strm_chosen == 0: return 1
     return (1.0*(self.strm_succeeded))/self.strm_chosen
+
+  def circ_succeed_ratio(self):
+    return (self.circ_succeed_rate())/(StatsRouter.global_cs_mean)
+
+  def strm_succeed_ratio(self):
+    return (self.strm_succeed_rate())/(StatsRouter.global_ss_mean)
+
+  def circ_fail_ratio(self):
+    return (1.0-self.circ_fail_rate())/(1.0-StatsRouter.global_cf_mean)
+
+  def strm_fail_ratio(self):
+    return (1.0-self.strm_fail_rate())/(1.0-StatsRouter.global_sf_mean)
 
   def current_uptime(self):
     if self.became_active_at:
@@ -336,6 +348,10 @@ class StatsRouter(TorCtl.Router):
   global_ratio_mean = 0.0
   global_ratio_dev = 0.0
   global_bw_mean = 0.0
+  global_cf_mean = 0.0
+  global_sf_mean = 0.0
+  global_cs_mean = 0.0
+  global_ss_mean = 0.0
 
   def __str__(self):
     return (self.idhex+" ("+self.nickname+")\n"
@@ -450,6 +466,34 @@ class StatsHandler(PathSupport.PathBuilder):
             filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
     return avg 
 
+  def avg_circ_failure(self):
+    n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
+    if n == 0: return (0, 0)
+    avg = reduce(lambda x, y: x+y.circ_fail_rate(), 
+            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+    return avg 
+
+  def avg_stream_failure(self):
+    n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
+    if n == 0: return (0, 0)
+    avg = reduce(lambda x, y: x+y.strm_fail_rate(), 
+            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+    return avg 
+
+  def avg_circ_success(self):
+    n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
+    if n == 0: return (0, 0)
+    avg = reduce(lambda x, y: x+y.circ_succeed_rate(), 
+            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+    return avg 
+
+  def avg_stream_success(self):
+    n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
+    if n == 0: return (0, 0)
+    avg = reduce(lambda x, y: x+y.strm_succeed_rate(), 
+            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+    return avg 
+
   def write_reasons(self, f, reasons, name):
     "Write out all the failure reasons and statistics for all Routers"
     f.write("\n\n\t----------------- "+name+" -----------------\n")
@@ -486,6 +530,12 @@ class StatsHandler(PathSupport.PathBuilder):
     StatsRouter.global_ratio_dev = dev
 
     StatsRouter.global_bw_mean = self.avg_adv_bw()
+
+    StatsRouter.global_cf_mean = self.avg_circ_failure()
+    StatsRouter.global_sf_mean = self.avg_stream_failure()
+    
+    StatsRouter.global_cs_mean = self.avg_circ_success()
+    StatsRouter.global_ss_mean = self.avg_stream_success()
 
     strm_bw_ratio = copy.copy(self.sorted_r)
     strm_bw_ratio.sort(lambda x, y: cmp(x.strm_bw_ratio(), y.strm_bw_ratio()))
@@ -607,7 +657,7 @@ class StatsHandler(PathSupport.PathBuilder):
     self.circ_failed = 0
     self.suspect_reasons.clear()
     self.failed_reasons.clear()
-    for r in self.sorted_r: r.reset()
+    for r in self.routers.itervalues(): r.reset()
 
   def close_circuit(self, id):
     PathSupport.PathBuilder.close_circuit(self, id)
@@ -724,24 +774,24 @@ class StatsHandler(PathSupport.PathBuilder):
       if s.remote_reason: rreason = s.remote_reason
       else: rreason = "NONE"
       reason = s.event_name+":"+s.status+":"+lreason+":"+rreason+":"+self.streams[s.strm_id].kind
+      circ = self.streams[s.strm_id].circ
+      if not circ: circ = self.streams[s.strm_id].pending_circ
       if (s.status in ("DETACHED", "FAILED", "CLOSED", "SUCCEEDED")
           and not s.circ_id):
         # XXX: REMAPs can do this (normal). Also REASON=DESTROY (bug?)
-        # XXX: Timeouts should count failure on the pending circ instead 
-        # of returning..
-        if s.reason == "TIMEOUT" or s.reason == "EXITPOLICY":
-          plog("NOTICE", "Stream "+str(s.strm_id)+" detached with "+s.reason)
+        if circ:
+          plog("INFO", "Stream "+s.status+" of "+str(s.strm_id)+" gave circ 0.  Resetting to stored circ id: "+str(circ.circ_id))
+          s.circ_id = circ.circ_id
+        #elif s.reason == "TIMEOUT" or s.reason == "EXITPOLICY":
+        #  plog("NOTICE", "Stream "+str(s.strm_id)+" detached with "+s.reason)
         else:
-          plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
-        PathBuilder.stream_status_event(self, s)
-        return
+          plog("WARN", "Stream "+str(s.strm_id)+" detached from no known circuit with reason: "+str(s.reason))
+          PathBuilder.stream_status_event(self, s)
+          return
 
       # Verify circ id matches stream.circ
       if s.status not in ("NEW", "NEWRESOLVE", "REMAP"):
-        circ = self.streams[s.strm_id].circ
-        if not circ: circ = self.streams[s.strm_id].pending_circ
-        # XXX: Figure out who to attribute this failure to
-        if circ and circ.circ_id != s.circ_id:
+        if s.circ_id and circ and circ.circ_id != s.circ_id:
           plog("WARN", str(s.strm_id) + " has mismatch of "
                 +str(s.circ_id)+" v "+str(circ.circ_id))
         if s.circ_id and s.circ_id not in self.circuits:

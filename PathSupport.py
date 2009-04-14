@@ -1143,7 +1143,11 @@ class Circuit:
     self.extend_times = []      # List of all extend-durations
     self.setup_duration = None  # Sum of extend-times
     self.pending_streams = []   # Which stream IDs are pending us
-  
+    # XXX: Unused.. Need to use for refcounting because
+    # sometimes circuit closed events come before the stream
+    # close and we need to track those failures..
+    self.carried_streams = []
+ 
   def id_path(self):
     "Returns a list of idhex keys for the path of Routers"
     return map(lambda r: r.idhex, self.path)
@@ -1432,7 +1436,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
         if s.reason == "TIMEOUT" or s.reason == "EXITPOLICY":
           plog("NOTICE", "Stream "+str(s.strm_id)+" detached with "+s.reason)
         else:
-          plog("WARN", "Stream "+str(s.strm_id)+" detachached from no circuit with reason: "+str(s.reason))
+          plog("WARN", "Stream "+str(s.strm_id)+" detached from no circuit with reason: "+str(s.reason))
       else:
         self.streams[s.strm_id].detached_from.append(s.circ_id)
       
