@@ -22,14 +22,14 @@ __all__ = ["Enum", "Enum2", "Callable", "sort_list", "quote", "escape_dots", "un
 
 # TODO: Make functions to read these from a config file. This isn't
 # the right place for them either.. But at least it's unified.
-tor_port = 9070
+tor_port = 9060
 tor_host = '127.0.0.1'
 
-control_port = 9071
+control_port = 9061
 control_host = '127.0.0.1'
 control_pass = ""
 
-meta_port = 9072
+meta_port = 9052
 meta_host = '127.0.0.1'
 
 class Enum:
