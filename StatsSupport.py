@@ -286,15 +286,15 @@ class StatsRouter(TorCtl.Router):
     if self.circ_chosen == 0: return 1
     return (1.0*(self.circ_succeeded))/self.circ_chosen
 
-  def strm_succeed_rate(self):
+  def strm_suspect_rate(self):
     if self.strm_chosen == 0: return 1
-    return (1.0*(self.strm_succeeded))/self.strm_chosen
+    return (1.0*(self.strm_suspected+self.strm_failed))/self.strm_chosen
 
   def circ_succeed_ratio(self):
     return (self.circ_succeed_rate())/(StatsRouter.global_cs_mean)
 
-  def strm_succeed_ratio(self):
-    return (self.strm_succeed_rate())/(StatsRouter.global_ss_mean)
+  def strm_suspect_ratio(self):
+    return (1.0-self.strm_suspect_rate())/(1.0-StatsRouter.global_ss_mean)
 
   def circ_fail_ratio(self):
     return (1.0-self.circ_fail_rate())/(1.0-StatsRouter.global_cf_mean)
@@ -487,10 +487,10 @@ class StatsHandler(PathSupport.PathBuilder):
             filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
     return avg 
 
-  def avg_stream_success(self):
+  def avg_stream_suspects(self):
     n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
     if n == 0: return (0, 0)
-    avg = reduce(lambda x, y: x+y.strm_succeed_rate(), 
+    avg = reduce(lambda x, y: x+y.strm_suspect_rate(), 
             filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
     return avg 
 
@@ -512,7 +512,7 @@ class StatsHandler(PathSupport.PathBuilder):
   # FIXME: Maybe move this two up into StatsRouter too?
   ratio_key = """Metatroller Ratio Statistics:
   SR=Stream avg ratio     AR=Advertized bw ratio    BRR=Adv. bw avg ratio
-  CSR=Circ success ratio  SSR=Stream success ratio  CFR=Circ Fail Ratio
+  CSR=Circ success ratio  SSR=Stream suspect ratio  CFR=Circ Fail Ratio
   SFR=Stream fail ratio   CC=Circuit Count          SC=Stream Count
   P=Percentile Rank       U=Uptime (h)\n"""
   
@@ -535,14 +535,14 @@ class StatsHandler(PathSupport.PathBuilder):
     StatsRouter.global_sf_mean = self.avg_stream_failure()
     
     StatsRouter.global_cs_mean = self.avg_circ_success()
-    StatsRouter.global_ss_mean = self.avg_stream_success()
+    StatsRouter.global_ss_mean = self.avg_stream_suspects()
 
     strm_bw_ratio = copy.copy(self.sorted_r)
     strm_bw_ratio.sort(lambda x, y: cmp(x.strm_bw_ratio(), y.strm_bw_ratio()))
     for r in strm_bw_ratio:
       if r.circ_chosen == 0: continue
       f.write(r.idhex+"="+r.nickname+"\n  ")
-      f.write("SR="+str(round(r.strm_bw_ratio(),4))+" AR="+str(round(r.adv_ratio(), 4))+" BRR="+str(round(r.bw_ratio_ratio(),4))+" CSR="+str(round(r.circ_succeed_ratio(),4))+" SSR="+str(round(r.strm_succeed_ratio(),4))+" CFR="+str(round(r.circ_fail_ratio(),4))+" SFR="+str(round(r.strm_fail_ratio(),4))+" CC="+str(r.circ_chosen)+" SC="+str(r.strm_chosen)+" U="+str(round(r.current_uptime()/3600,1))+" P="+str(round((100.0*r.avg_rank())/len(self.sorted_r),1))+"\n")
+      f.write("SR="+str(round(r.strm_bw_ratio(),4))+" AR="+str(round(r.adv_ratio(), 4))+" BRR="+str(round(r.bw_ratio_ratio(),4))+" CSR="+str(round(r.circ_succeed_ratio(),4))+" SSR="+str(round(r.strm_suspect_ratio(),4))+" CFR="+str(round(r.circ_fail_ratio(),4))+" SFR="+str(round(r.strm_fail_ratio(),4))+" CC="+str(r.circ_chosen)+" SC="+str(r.strm_chosen)+" U="+str(round(r.current_uptime()/3600,1))+" P="+str(round((100.0*r.avg_rank())/len(self.sorted_r),1))+"\n")
     f.close()
  
   def write_stats(self, filename):
@@ -723,7 +723,10 @@ class StatsHandler(PathSupport.PathBuilder):
       elif c.status == "CLOSED":
         # Since PathBuilder deletes the circuit on a failed, 
         # we only get this for a clean close that was not
-        # requested by us
+        # requested by us.
+
+        # Don't count circuits we requested closed from
+        # pathbuilder, they are counted there instead.
         if not self.circuits[c.circ_id].requested_closed:
           self.circ_succeeded += 1
           for r in self.circuits[c.circ_id].path:

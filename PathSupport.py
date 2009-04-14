@@ -1412,6 +1412,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
     if s.strm_id in self.streams and self.streams[s.strm_id].ignored:
       plog("DEBUG", "Ignoring stream: " + str(s.strm_id))
       return
+  
+    # XXX: Copy s.circ_id==0 check+reset from StatsSupport here too?
 
     if s.status == "NEW" or s.status == "NEWRESOLVE":
       if s.status == "NEWRESOLVE" and not s.target_port:
