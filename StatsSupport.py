@@ -282,16 +282,16 @@ class StatsRouter(TorCtl.Router):
     if self.strm_chosen == 0: return 0
     return (1.0*self.strm_failed)/self.strm_chosen
 
-  def circ_succeed_rate(self):
+  def circ_suspect_rate(self):
     if self.circ_chosen == 0: return 1
-    return (1.0*(self.circ_succeeded))/self.circ_chosen
+    return (1.0*(self.circ_suspected+self.circ_failed))/self.circ_chosen
 
   def strm_suspect_rate(self):
     if self.strm_chosen == 0: return 1
     return (1.0*(self.strm_suspected+self.strm_failed))/self.strm_chosen
 
-  def circ_succeed_ratio(self):
-    return (self.circ_succeed_rate())/(StatsRouter.global_cs_mean)
+  def circ_suspect_ratio(self):
+    return (1.0-self.circ_suspect_rate())/(1.0-StatsRouter.global_cs_mean)
 
   def strm_suspect_ratio(self):
     return (1.0-self.strm_suspect_rate())/(1.0-StatsRouter.global_ss_mean)
@@ -480,10 +480,10 @@ class StatsHandler(PathSupport.PathBuilder):
             filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
     return avg 
 
-  def avg_circ_success(self):
+  def avg_circ_suspects(self):
     n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
     if n == 0: return (0, 0)
-    avg = reduce(lambda x, y: x+y.circ_succeed_rate(), 
+    avg = reduce(lambda x, y: x+y.circ_suspect_rate(), 
             filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
     return avg 
 
@@ -511,8 +511,8 @@ class StatsHandler(PathSupport.PathBuilder):
 
   # FIXME: Maybe move this two up into StatsRouter too?
   ratio_key = """Metatroller Ratio Statistics:
-  SR=Stream avg ratio     AR=Advertized bw ratio    BRR=Adv. bw avg ratio
-  CSR=Circ success ratio  SSR=Stream suspect ratio  CFR=Circ Fail Ratio
+  SR=Stream avg ratio     AR=Advertised bw ratio    BRR=Adv. bw avg ratio
+  CSR=Circ suspect ratio  CFR=Circ Fail Ratio       SSR=Stream suspect ratio
   SFR=Stream fail ratio   CC=Circuit Count          SC=Stream Count
   P=Percentile Rank       U=Uptime (h)\n"""
   
@@ -534,7 +534,7 @@ class StatsHandler(PathSupport.PathBuilder):
     StatsRouter.global_cf_mean = self.avg_circ_failure()
     StatsRouter.global_sf_mean = self.avg_stream_failure()
     
-    StatsRouter.global_cs_mean = self.avg_circ_success()
+    StatsRouter.global_cs_mean = self.avg_circ_suspects()
     StatsRouter.global_ss_mean = self.avg_stream_suspects()
 
     strm_bw_ratio = copy.copy(self.sorted_r)
@@ -542,7 +542,7 @@ class StatsHandler(PathSupport.PathBuilder):
     for r in strm_bw_ratio:
       if r.circ_chosen == 0: continue
       f.write(r.idhex+"="+r.nickname+"\n  ")
-      f.write("SR="+str(round(r.strm_bw_ratio(),4))+" AR="+str(round(r.adv_ratio(), 4))+" BRR="+str(round(r.bw_ratio_ratio(),4))+" CSR="+str(round(r.circ_succeed_ratio(),4))+" SSR="+str(round(r.strm_suspect_ratio(),4))+" CFR="+str(round(r.circ_fail_ratio(),4))+" SFR="+str(round(r.strm_fail_ratio(),4))+" CC="+str(r.circ_chosen)+" SC="+str(r.strm_chosen)+" U="+str(round(r.current_uptime()/3600,1))+" P="+str(round((100.0*r.avg_rank())/len(self.sorted_r),1))+"\n")
+      f.write("SR="+str(round(r.strm_bw_ratio(),4))+" AR="+str(round(r.adv_ratio(), 4))+" BRR="+str(round(r.bw_ratio_ratio(),4))+" CSR="+str(round(r.circ_suspect_ratio(),4))+" CFR="+str(round(r.circ_fail_ratio(),4))+" SSR="+str(round(r.strm_suspect_ratio(),4))+" SFR="+str(round(r.strm_fail_ratio(),4))+" CC="+str(r.circ_chosen)+" SC="+str(r.strm_chosen)+" U="+str(round(r.current_uptime()/3600,1))+" P="+str(round((100.0*r.avg_rank())/len(self.sorted_r),1))+"\n")
     f.close()
  
   def write_stats(self, filename):
