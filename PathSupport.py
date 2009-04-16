@@ -1285,7 +1285,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
       plog("ERROR", "Failed closing circuit " + str(id) + ": " + str(e))
 
   def circuit_list(self):
-    "Return an iterator or a list of circuits prioritized for stream selection"
+    """ Return an iterator or a list of circuits prioritized for 
+        stream selection."""
     return self.circuits.itervalues()
 
   def attach_stream_any(self, stream, badcircs):

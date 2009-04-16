@@ -5,33 +5,35 @@
 
 Support classes for statisics gathering
 
-The StatsSupport package contains several classes that extend PathSupport to
-gather continuous statistics on the Tor network.
+The StatsSupport package contains several classes that extend
+PathSupport to gather continuous statistics on the Tor network.
 
-The main entrypoint is to extend or create an instance of the StatsHandler
-class. The StatsHandler extends from TorCtl.PathSupport.PathBuilder, which is
-itself a TorCtl.EventHandler. The StatsHandler listens to CIRC and STREAM
-events and gathers all manner of statics on their creation and failure before
-passing the events back up to the PathBuilder code, which manages the actual
+The main entrypoint is to extend or create an instance of the
+StatsHandler class. The StatsHandler extends from
+TorCtl.PathSupport.PathBuilder, which is itself a TorCtl.EventHandler.
+The StatsHandler listens to CIRC and STREAM events and gathers all
+manner of statics on their creation and failure before passing the
+events back up to the PathBuilder code, which manages the actual
 construction and the attachment of streams to circuits.
 
 The package also contains a number of support classes that help gather
 additional statistics on the reliability and performance of routers.
 
-For the purpose of accounting failures, the code tracks two main classes of
-failure: 'actual' failure and 'suspected' failure. The general rule is that an
-actual failure is attributed to the node that directly handled the circuit or
-stream. For streams, this is considered to be the exit node. For circuits, it
-is both the extender and the extendee. 'Suspected' failures, on the other
-hand, are attributed to every member of the circuit up until the extendee for
-circuits, and all hops for streams.
+For the purpose of accounting failures, the code tracks two main classes
+of failure: 'actual' failure and 'suspected' failure. The general rule
+is that an actual failure is attributed to the node that directly
+handled the circuit or stream. For streams, this is considered to be the
+exit node. For circuits, it is both the extender and the extendee.
+'Suspected' failures, on the other hand, are attributed to every member
+of the circuit up until the extendee for circuits, and all hops for
+streams.
 
-For bandwidth accounting, the average stream bandwidth and the average ratio
-of stream bandwidth to advertised bandwidth are tracked, and when the
-statistics are written, a Z-test is performed to calculate the probabilities
-of these values assuming a normal distribution. Note, however, that it has not
-been verified that this distribution is actually normal. It is likely to be
-something else (pareto, perhaps?).
+For bandwidth accounting, the average stream bandwidth and the average
+ratio of stream bandwidth to advertised bandwidth are tracked, and when
+the statistics are written, a Z-test is performed to calculate the
+probabilities of these values assuming a normal distribution. Note,
+however, that it has not been verified that this distribution is
+actually normal. It is likely to be something else (pareto, perhaps?).
 
 """
 
