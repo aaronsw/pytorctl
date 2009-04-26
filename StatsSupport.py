@@ -293,15 +293,19 @@ class StatsRouter(TorCtl.Router):
     return (1.0*(self.strm_suspected+self.strm_failed))/self.strm_chosen
 
   def circ_suspect_ratio(self):
+    if 1.0-StatsRouter.global_cs_mean <= 0.0: return 0
     return (1.0-self.circ_suspect_rate())/(1.0-StatsRouter.global_cs_mean)
 
   def strm_suspect_ratio(self):
+    if 1.0-StatsRouter.global_ss_mean <= 0.0: return 0
     return (1.0-self.strm_suspect_rate())/(1.0-StatsRouter.global_ss_mean)
 
   def circ_fail_ratio(self):
+    if 1.0-StatsRouter.global_cf_mean <= 0.0: return 0
     return (1.0-self.circ_fail_rate())/(1.0-StatsRouter.global_cf_mean)
 
   def strm_fail_ratio(self):
+    if 1.0-StatsRouter.global_sf_mean <= 0.0: return 0
     return (1.0-self.strm_fail_rate())/(1.0-StatsRouter.global_sf_mean)
 
   def current_uptime(self):
