@@ -265,7 +265,7 @@ class Router:
         self.__dict__[i] =  copy.deepcopy(args[0].__dict__[i])
       return
     else:
-      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published, contact) = args
+      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published, contact, rate_limited) = args
     self.idhex = idhex
     self.nickname = name
     self.bw = bw
@@ -282,6 +282,7 @@ class Router:
     self.refcount = 0 # How many open circs are we currently in?
     self.deleted = False # Has Tor already deleted this descriptor?
     self.contact = contact
+    self.rate_limited = rate_limited
 
   def __str__(self):
     s = self.idhex, self.nickname
@@ -328,7 +329,11 @@ class Router:
       elif rj:
         exitpolicy.append(ExitPolicyLine(False, *rj.groups()))
       elif bw:
-        bw_observed = min(map(int, bw.groups()))
+        bws = map(int, bw.groups())
+        bw_observed = min(bws)
+        rate_limited = False
+        if bws[0] < bws[1]:
+          rate_limited = True
       elif pl:
         version, os = pl.groups()
       elif up:
@@ -348,7 +353,7 @@ class Router:
     if not version or not os:
       plog("INFO", "No version and/or OS for router " + ns.nickname)
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
-        ns.flags, ip, version, os, uptime, published, contact)
+        ns.flags, ip, version, os, uptime, published, contact, rate_limited)
   build_from_desc = Callable(build_from_desc)
 
   def update_to(self, new):

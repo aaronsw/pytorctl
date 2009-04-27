@@ -73,7 +73,7 @@ __all__ = ["NodeRestrictionList", "PathRestrictionList",
 "CountryCodeRestriction", "CountryRestriction",
 "UniqueCountryRestriction", "SingleCountryRestriction",
 "ContinentRestriction", "ContinentJumperRestriction",
-"UniqueContinentRestriction"]
+"UniqueContinentRestriction", "MetaPathRestriction", "RateLimitedRestriction"]
 
 #################### Path Support Interfaces #####################
 
@@ -91,46 +91,19 @@ class NodeRestriction:
     "Returns true if Router 'r' is acceptable for this restriction"
     return True  
 
-class NodeRestrictionList:
-  "Class to manage a list of NodeRestrictions"
-  def __init__(self, restrictions):
-    "Constructor. 'restrictions' is a list of NodeRestriction instances"
-    self.restrictions = restrictions
-
-  def r_is_ok(self, r):
-    "Returns true of Router 'r' passes all of the contained restrictions"
-    for rs in self.restrictions:
-      if not rs.r_is_ok(r): return False
-    return True
-
-  def add_restriction(self, restr):
-    "Add a NodeRestriction 'restr' to the list of restrictions"
-    self.restrictions.append(restr)
-
-  # TODO: This does not collapse meta restrictions..
-  def del_restriction(self, RestrictionClass):
-    """Remove all restrictions of type RestrictionClass from the list.
-       Does NOT inspect or collapse MetaNode Restrictions (though 
-       MetaRestrictions can be removed if RestrictionClass is 
-       MetaNodeRestriction)"""
-    self.restrictions = filter(
-        lambda r: not isinstance(r, RestrictionClass),
-          self.restrictions)
-  
-  def clear(self):
-    """ Remove all restrictions """
-    self.restrictions = []
-
-  def __str__(self):
-    return self.__class__.__name__+"("+str(map(str, self.restrictions))+")"
-
 class PathRestriction:
   "Interface for path restriction policies"
   def path_is_ok(self, path):
     "Return true if the list of Routers in path satisfies this restriction"
     return True  
 
-class PathRestrictionList:
+# TODO: Or, Not, N of M
+class MetaPathRestriction(PathRestriction):
+  "MetaPathRestrictions are path restriction aggregators."
+  def add_restriction(self, rstr): raise NotImplemented()
+  def del_restriction(self, RestrictionClass): raise NotImplemented()
+ 
+class PathRestrictionList(MetaPathRestriction):
   """Class to manage a list of PathRestrictions"""
   def __init__(self, restrictions):
     "Constructor. 'restrictions' is a list of PathRestriction instances"
@@ -331,6 +304,15 @@ class MinBWRestriction(NodeRestriction):
 
   def __str__(self):
     return self.__class__.__name__+"("+str(self.min_bw)+")"
+
+class RateLimitedRestriction(NodeRestriction):
+  def __init__(self, limited=True):
+    self.limited = limited
+
+  def r_is_ok(self, router): return router.rate_limited == self.limited
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.limited)+")"
    
 class VersionIncludeRestriction(NodeRestriction):
   """Require that the version match one in the list"""
@@ -394,6 +376,7 @@ class ExitPolicyRestriction(NodeRestriction):
 class MetaNodeRestriction(NodeRestriction):
   """Interface for a NodeRestriction that is an expression consisting of 
      multiple other NodeRestrictions"""
+  def add_restriction(self, rstr): raise NotImplemented()
   # TODO: these should collapse the restriction and return a new
   # instance for re-insertion (or None)
   def next_rstr(self): raise NotImplemented()
@@ -443,6 +426,39 @@ class AtLeastNNodeRestriction(MetaNodeRestriction):
 
   def __str__(self):
     return self.__class__.__name__+"("+str(map(str, self.rstrs))+","+str(self.n)+")"
+
+class NodeRestrictionList(MetaNodeRestriction):
+  "Class to manage a list of NodeRestrictions"
+  def __init__(self, restrictions):
+    "Constructor. 'restrictions' is a list of NodeRestriction instances"
+    self.restrictions = restrictions
+
+  def r_is_ok(self, r):
+    "Returns true of Router 'r' passes all of the contained restrictions"
+    for rs in self.restrictions:
+      if not rs.r_is_ok(r): return False
+    return True
+
+  def add_restriction(self, restr):
+    "Add a NodeRestriction 'restr' to the list of restrictions"
+    self.restrictions.append(restr)
+
+  # TODO: This does not collapse meta restrictions..
+  def del_restriction(self, RestrictionClass):
+    """Remove all restrictions of type RestrictionClass from the list.
+       Does NOT inspect or collapse MetaNode Restrictions (though 
+       MetaRestrictions can be removed if RestrictionClass is 
+       MetaNodeRestriction)"""
+    self.restrictions = filter(
+        lambda r: not isinstance(r, RestrictionClass),
+          self.restrictions)
+  
+  def clear(self):
+    """ Remove all restrictions """
+    self.restrictions = []
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(map(str, self.restrictions))+")"
 
 
 #################### Path Restrictions #####################
@@ -897,10 +913,16 @@ class SelectionManager(BaseSelectionManager):
     manager, you must schedule a config update job using 
     PathBuilder.schedule_selmgr() with a worker function to modify 
     this object.
+ 
+    XXX: Warning. The constructor of this class is subject to change
+    and may undergo reorganization in the near future. Watch for falling 
+    bits.
     """
+  # XXX: Hrmm, consider simplifying this. It is confusing and unweildy.
   def __init__(self, pathlen, order_exits,
          percent_fast, percent_skip, min_bw, use_all_exits,
-         uniform, use_exit, use_guards,geoip_config=None,restrict_guards=False):
+         uniform, use_exit, use_guards,geoip_config=None,
+         restrict_guards=False, extra_node_rstr=None):
     BaseSelectionManager.__init__(self)
     self.__ordered_exit_gen = None 
     self.pathlen = pathlen
@@ -916,6 +938,7 @@ class SelectionManager(BaseSelectionManager):
     self.restrict_guards_only = restrict_guards
     self.bad_restrictions = False
     self.consensus = None
+    self.extra_node_rstr=extra_node_rstr
 
   def reconfigure(self, consensus=None):
     try:
@@ -977,6 +1000,10 @@ class SelectionManager(BaseSelectionManager):
         [PercentileRestriction(nonentry_skip, nonentry_fast, sorted_r),
          FlagsRestriction(["Valid", "Running","Fast"], ["BadExit"])])
 
+    if self.extra_node_rstr:
+      entry_rstr.add_restriction(self.extra_node_rstr)
+      mid_rstr.add_restriction(self.extra_node_rstr)
+      self.exit_rstr.add_restriction(self.extra_node_rstr)
 
     # GeoIP configuration
     if self.geoip_config:
@@ -1147,7 +1174,7 @@ class Circuit:
     # sometimes circuit closed events come before the stream
     # close and we need to track those failures..
     self.carried_streams = []
- 
+
   def id_path(self):
     "Returns a list of idhex keys for the path of Routers"
     return map(lambda r: r.idhex, self.path)
@@ -1413,7 +1440,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
     if s.strm_id in self.streams and self.streams[s.strm_id].ignored:
       plog("DEBUG", "Ignoring stream: " + str(s.strm_id))
       return
-  
+
     # XXX: Copy s.circ_id==0 check+reset from StatsSupport here too?
 
     if s.status == "NEW" or s.status == "NEWRESOLVE":
