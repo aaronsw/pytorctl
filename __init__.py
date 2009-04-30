@@ -24,4 +24,5 @@ again an event handler with hooks to record statistics on circuit
 creation, stream bandwidth, and circuit failure information.
 """
 
-__all__ = ["TorUtil", "GeoIPSupport", "PathSupport", "TorCtl", "StatsSupport"]
+__all__ = ["TorUtil", "GeoIPSupport", "PathSupport", "TorCtl", "StatsSupport",
+           "SQLSupport"]
