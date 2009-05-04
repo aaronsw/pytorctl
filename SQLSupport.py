@@ -272,16 +272,20 @@ class RouterStats(Entity):
     # http://www.sqlalchemy.org/docs/04/sqlexpression.html#sql_update
     to_s = select([func.count(Extension.id)], 
         and_(stats_clause, Extension.table.c.to_node_idhex
-             == RouterStats.table.c.router_idhex)).as_scalar()
+             == RouterStats.table.c.router_idhex,
+             Extension.table.c.row_type=='extension')).as_scalar()
     from_s = select([func.count(Extension.id)], 
         and_(stats_clause, Extension.table.c.from_node_idhex
-             == RouterStats.table.c.router_idhex)).as_scalar()
+             == RouterStats.table.c.router_idhex,
+             Extension.table.c.row_type=='extension')).as_scalar()
     f_to_s = select([func.count(FailedExtension.id)], 
         and_(stats_clause, FailedExtension.table.c.to_node_idhex
-             == RouterStats.table.c.router_idhex)).as_scalar()
+             == RouterStats.table.c.router_idhex,
+             Extension.table.c.row_type=='faledextension')).as_scalar()
     f_from_s = select([func.count(FailedExtension.id)], 
         and_(stats_clause, FailedExtension.table.c.from_node_idhex
-             == RouterStats.table.c.router_idhex)).as_scalar()
+                       == RouterStats.table.c.router_idhex,
+             Extension.table.c.row_type=='faledextension')).as_scalar()
     avg_ext = select([func.avg(Extension.delta)], 
         and_(stats_clause,
              Extension.table.c.to_node_idhex==RouterStats.table.c.router_idhex,
@@ -380,7 +384,7 @@ class RouterStats(Entity):
         RouterStats.table.c.ext_ratio:
          (RouterStats.table.c.avg_first_ext)/(avg_ext),
         RouterStats.table.c.sbw_ratio:
-         (RouterStats.table.c.sbw)/(avg_sbw)})
+         (RouterStats.table.c.sbw)/(avg_sbw)}).execute()
     tc_session.commit()
   _compute_ratios = Callable(_compute_ratios)
 
@@ -502,36 +506,45 @@ class RouterStats(Entity):
       filt_sbw = tc_session.query(func.avg(RouterStats.filt_sbw)).filter(pct_clause).filter(stat_clause).scalar()
       percentile = tc_session.query(func.avg(RouterStats.percentile)).filter(pct_clause).filter(stat_clause).scalar()
 
-    def cvt(a,b):
-      if type(a) == float: return round(a,b)
+    def cvt(a,b,c=1):
+      if type(a) == float: return round(a/c,b)
       elif type(a) == type(None): return "None"
-      else: return type(a) 
+      else: return type(a)
 
     sql_key = """SQLSupport Statistics:
     CFR=Circ From Rate         CTR=Circ To Rate     CBR=Circ To/From Rate
     CFE=Avg 1st Ext time (s)   SBW=Avg Stream BW    FBW=Filtered stream bw
+    RF=Circ From Ratio         RT=Circ To Ratio     RB=Circ To/From Ratio
+    RE=1st Ext Ratio           RS=Stream BW Ratio   RF=Filt Stream Ratio
     PR=Percentile Rank\n\n"""
  
     f.write(sql_key)
     f.write("Average Statistics:\n")
-    f.write(" CFR="+str(cvt(circ_from_rate,2))+"\n")
-    f.write(" CTR="+str(cvt(circ_to_rate,2))+"\n")
-    f.write(" CBR="+str(cvt(circ_bi_rate,2))+"\n")
-    f.write(" CFE="+str(cvt(avg_first_ext,2))+"\n")
-    f.write(" SBW="+str(cvt(sbw,2))+"\n")
-    f.write(" FBW="+str(cvt(filt_sbw,2))+"\n")
-    f.write(" PR="+str(cvt(percentile,2))+"\n\n")
+    f.write("   CFR="+str(cvt(circ_from_rate,2))+" ")
+    f.write(" CTR="+str(cvt(circ_to_rate,2))+" ")
+    f.write(" CBR="+str(cvt(circ_bi_rate,2))+" ")
+    f.write(" CFE="+str(cvt(avg_first_ext,2))+" ")
+    f.write(" SBW="+str(cvt(sbw,2,1024))+" ")
+    f.write(" FBW="+str(cvt(filt_sbw,2,1024))+" ")
+    f.write(" PR="+str(cvt(percentile,2))+"\n\n\n")
 
     for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
            order_by(order_by).all():
-      f.write(s.router.idhex+"="+s.router.nickname+"\n")
-      f.write(" CFR="+str(cvt(s.circ_from_rate,2))+" ")
+      f.write(s.router.idhex+" ("+s.router.nickname+")\n")
+      f.write("   CFR="+str(cvt(s.circ_from_rate,2))+" ")
       f.write(" CTR="+str(cvt(s.circ_to_rate,2))+" ")
       f.write(" CBR="+str(cvt(s.circ_bi_rate,2))+" ")
       f.write(" CFE="+str(cvt(s.avg_first_ext,2))+" ")
-      f.write(" SBW="+str(cvt(s.sbw,2))+" ")
-      f.write(" FBW="+str(cvt(s.filt_sbw,2))+" ")
+      f.write(" SBW="+str(cvt(s.sbw,2,1024))+" ")
+      f.write(" FBW="+str(cvt(s.filt_sbw,2,1024))+" ")
       f.write(" PR="+str(cvt(s.percentile,1))+"\n")
+      f.write("   RF="+str(cvt(s.circ_from_ratio,2))+" ")
+      f.write(" RT="+str(cvt(s.circ_to_ratio,2))+" ")
+      f.write(" RB="+str(cvt(s.circ_bi_ratio,2))+" ")
+      f.write(" RE="+str(cvt(s.ext_ratio,2))+" ")
+      f.write(" RS="+str(cvt(s.sbw_ratio,2))+" ")
+      f.write(" RF="+str(cvt(s.filt_sbw_ratio,2))+"\n\n")
+
     f.flush()
   write_stats = Callable(write_stats)  
     
