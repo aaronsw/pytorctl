@@ -159,7 +159,7 @@ class ORConnEvent(Event):
     self.ncircs = ncircs
 
 class StreamBwEvent(Event):
-  def __init__(self, event_name, strm_id, read, written):
+  def __init__(self, event_name, strm_id, written, read):
     Event.__init__(self, event_name)
     self.strm_id = int(strm_id)
     self.bytes_read = int(read)
