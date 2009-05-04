@@ -382,9 +382,9 @@ class RouterStats(Entity):
         RouterStats.table.c.circ_bi_ratio:
          (1-RouterStats.table.c.circ_bi_rate)/(1-avg_bi_rate),
         RouterStats.table.c.ext_ratio:
-         (RouterStats.table.c.avg_first_ext)/(avg_ext),
+         avg_ext/RouterStats.table.c.avg_first_ext,
         RouterStats.table.c.sbw_ratio:
-         (RouterStats.table.c.sbw)/(avg_sbw)}).execute()
+         RouterStats.table.c.sbw/avg_sbw}).execute()
     tc_session.commit()
   _compute_ratios = Callable(_compute_ratios)
 
