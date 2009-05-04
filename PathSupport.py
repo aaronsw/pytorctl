@@ -1534,8 +1534,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
         self.streams[s.strm_id].port = s.target_port
 
   def stream_bw_event(self, s):
-    output = [s.event_name, str(s.strm_id), str(s.bytes_read),
-              str(s.bytes_written)]
+    output = [s.event_name, str(s.strm_id), str(s.bytes_written),
+              str(s.bytes_read)]
     plog("DEBUG", " ".join(output))
     if not s.strm_id in self.streams:
       plog("WARN", "BW event for unknown stream id: "+str(s.strm_id))
