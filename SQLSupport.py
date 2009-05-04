@@ -575,6 +575,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
     for idhex in idlist:
       if idhex not in self.consensus.routers: continue
       rc = self.consensus.routers[idhex]
+      if rc.down: continue
       r = Router.query.options(eagerload('bw_history')).filter_by(
                                   idhex=idhex).one()
       bwh = BwHistory(router=r, rank=rc.list_rank, bw=rc.bw, 
