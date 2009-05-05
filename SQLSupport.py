@@ -39,20 +39,20 @@ NO_FPE=2**-50
 # See http://elixir.ematia.de/trac/wiki/Recipes/MultipleDatabases
 OP=None
 tc_metadata = MetaData()
-tc_metadata.echo=False
+tc_metadata.echo=True
 tc_session = scoped_session(sessionmaker(autoflush=True))
 
-def setup_db(db_uri, drop=False):
-  tc_engine = create_engine(db_uri, echo=False)
+def setup_db(db_uri, echo=False, drop=False):
+  tc_engine = create_engine(db_uri, echo=echo)
   tc_metadata.bind = tc_engine
-  tc_metadata.echo = False
+  tc_metadata.echo = echo
 
   setup_all()
   if drop: drop_all()
   create_all()
 
 class Router(Entity):
-  using_options(order_by='-published', session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, order_by='-published', session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   idhex = Field(CHAR(40), primary_key=True, index=True)
   orhash = Field(CHAR(27))
@@ -71,7 +71,7 @@ class Router(Entity):
   bw = Field(Integer)
   version = Field(Integer)
   # FIXME: is mutable=False what we want? Do we care?
-  router = Field(PickleType(mutable=False)) 
+  #router = Field(PickleType(mutable=False)) 
   circuits = ManyToMany('Circuit')
   streams = ManyToMany('Stream')
   detached_streams = ManyToMany('Stream')
@@ -93,11 +93,11 @@ class Router(Entity):
     self.v3dir = "V3Dir" in router.flags
     self.hsdir = "HSDir" in router.flags
     self.version = router.version.version
-    self.router = router #pickle.dumps(router)
+    #self.router = router
     return self
 
 class BwHistory(Entity):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   router = ManyToOne('Router')
   bw = Field(Integer)
@@ -105,7 +105,7 @@ class BwHistory(Entity):
   pub_time = Field(Time)
 
 class Circuit(Entity):
-  using_options(order_by='-launch_time', session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, order_by='-launch_time', session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   routers = ManyToMany('Router')
   streams = OneToMany('Stream', inverse='circuit')
@@ -117,31 +117,31 @@ class Circuit(Entity):
 
 class FailedCircuit(Circuit):
   using_mapper_options(save_on_init=False)
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   #failed_extend = ManyToOne('Extension', inverse='circ')
   fail_reason = Field(Text)
   fail_time = Field(Float)
 
 class BuiltCircuit(Circuit):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   built_time = Field(Float)
   tot_delta = Field(Float)
 
 class DestroyedCircuit(Circuit):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   destroy_reason = Field(Text)
   destroy_time = Field(Float)
 
 class ClosedCircuit(BuiltCircuit):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   closed_time = Field(Float)
 
 class Extension(Entity):
   using_mapper_options(save_on_init=False)
-  using_options(order_by='-time', session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, order_by='-time', session=tc_session, metadata=tc_metadata)
   circ = ManyToOne('Circuit', inverse='extensions')
   from_node = ManyToOne('Router')
   to_node = ManyToOne('Router')
@@ -150,14 +150,14 @@ class Extension(Entity):
   delta = Field(Float)
 
 class FailedExtension(Extension):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   #failed_circ = ManyToOne('FailedCircuit', inverse='failed_extend')
   using_mapper_options(save_on_init=False)
   reason = Field(Text)
 
 class Stream(Entity):
-  using_options(session=tc_session, metadata=tc_metadata)
-  using_options(order_by='-start_time')
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, order_by='-start_time')
   using_mapper_options(save_on_init=False)
   tgt_host = Field(Text)
   tgt_port = Field(Integer)
@@ -172,30 +172,26 @@ class Stream(Entity):
   close_reason = Field(Text) # Shared by Failed and Closed. Unused here.
 
 class FailedStream(Stream):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   fail_reason = Field(Text)
   fail_time = Field(Float)
 
 class ClosedStream(Stream):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   end_time = Field(Float)
   read_bandwidth = Field(Float)
   write_bandwidth = Field(Float)
 
 class RouterStats(Entity):
-  using_options(session=tc_session, metadata=tc_metadata)
+  using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
   router = ManyToOne('Router', inverse="stats")
    
-  # Unused
-  circ_used = Field(Integer) # Extended up to this node
-  circ_fail = Field(Integer) # Includes timeouts of priors
-
   # Easily derived from BwHistory
   min_rank = Field(Integer)
-  avg_rank = Field(Integer)
+  avg_rank = Field(Float)
   max_rank = Field(Integer)
   avg_bw = Field(Float)
 
@@ -203,10 +199,10 @@ class RouterStats(Entity):
 
   # These can be derived with a single query over 
   # FailedExtension and Extension
-  circ_fail_to = Field(Integer) 
-  circ_fail_from = Field(Integer)
-  circ_try_to = Field(Integer)
-  circ_try_from = Field(Integer)
+  circ_fail_to = Field(Float) 
+  circ_fail_from = Field(Float)
+  circ_try_to = Field(Float)
+  circ_try_from = Field(Float)
 
   circ_from_rate = Field(Float)
   circ_to_rate = Field(Float)
@@ -281,11 +277,11 @@ class RouterStats(Entity):
     f_to_s = select([func.count(FailedExtension.id)], 
         and_(stats_clause, FailedExtension.table.c.to_node_idhex
              == RouterStats.table.c.router_idhex,
-             Extension.table.c.row_type=='faledextension')).as_scalar()
+             FailedExtension.table.c.row_type=='failedextension')).as_scalar()
     f_from_s = select([func.count(FailedExtension.id)], 
         and_(stats_clause, FailedExtension.table.c.from_node_idhex
                        == RouterStats.table.c.router_idhex,
-             Extension.table.c.row_type=='faledextension')).as_scalar()
+             FailedExtension.table.c.row_type=='failedextension')).as_scalar()
     avg_ext = select([func.avg(Extension.delta)], 
         and_(stats_clause,
              Extension.table.c.to_node_idhex==RouterStats.table.c.router_idhex,
@@ -928,7 +924,15 @@ def run_example(host, port):
       usage.
   """
   print "host is %s:%d"%(host,port)
-  setup_db("sqlite:///torflow.sqllite")
+  setup_db("sqlite:///torflow.sqlite", echo=False)
+
+  #print tc_session.query(((func.count(Extension.id)))).filter(and_(FailedExtension.table.c.row_type=='extension', FailedExtension.table.c.from_node_idhex == "7CAA2F5F998053EF5D2E622563DEB4A6175E49AC")).one()
+  #return
+  #for e in Extension.query.filter(FailedExtension.table.c.row_type=='extension').all():
+  #  if e.from_node: print "From: "+e.from_node.idhex+" "+e.from_node.nickname
+  #  if e.to_node: print "To: "+e.to_node.idhex+" "+e.to_node.nickname
+  #return
+
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.connect((host,port))
   c = Connection(s)

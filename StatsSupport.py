@@ -607,14 +607,14 @@ class StatsHandler(PathSupport.PathBuilder):
              +" s="+str(round(dev_extend,1)))
     
     # sort+print by bandwidth
-    bw_rate = copy.copy(self.sorted_r)
-    bw_rate.sort(lambda x, y: cmp(y.bw_ratio(), x.bw_ratio()))
-    self.write_routers(f, bw_rate, "Bandwidth Ratios")
-
-    # sort+print by bandwidth
     strm_bw_ratio = copy.copy(self.sorted_r)
     strm_bw_ratio.sort(lambda x, y: cmp(x.strm_bw_ratio(), y.strm_bw_ratio()))
     self.write_routers(f, strm_bw_ratio, "Stream Ratios")
+
+    # sort+print by bandwidth
+    bw_rate = copy.copy(self.sorted_r)
+    bw_rate.sort(lambda x, y: cmp(y.bw_ratio(), x.bw_ratio()))
+    self.write_routers(f, bw_rate, "Bandwidth Ratios")
 
     failed = copy.copy(self.sorted_r)
     failed.sort(lambda x, y:
