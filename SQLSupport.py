@@ -12,6 +12,7 @@ import socket
 import sys
 import time
 import datetime
+import math
 
 import PathSupport, TorCtl
 from TorUtil import *
@@ -184,6 +185,12 @@ class ClosedStream(Stream):
   read_bandwidth = Field(Float)
   write_bandwidth = Field(Float)
 
+  def bandwidth(self):
+    return self.tot_bandwidth()
+
+  def tot_bandwidth(self):
+    return self.read_bandwidth+self.write_bandwidth 
+
 class RouterStats(Entity):
   using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
@@ -214,8 +221,12 @@ class RouterStats(Entity):
 
   avg_first_ext = Field(Float)
   ext_ratio = Field(Float)
-  
+ 
+  strm_try = Field(Integer)
+  strm_closed = Field(Integer)
+ 
   sbw = Field(Float)
+  sbw_dev = Field(Float)
   sbw_ratio = Field(Float)
   filt_sbw = Field(Float)
   filt_sbw_ratio = Field(Float)
@@ -308,16 +319,26 @@ class RouterStats(Entity):
 
     # TODO: Give the streams relation table a sane name and reduce this too
     for rs in RouterStats.query.filter(stats_clause).\
-                        options(eagerload('router'), 
+                        options(eagerload('router'),
+                                eagerload('router.detached_streams'),
                                 eagerload('router.streams')).all():
       tot_bw = 0.0
       s_cnt = 0
       for s in rs.router.streams:
         if isinstance(s, ClosedStream):
-          tot_bw += s.read_bandwidth
+          tot_bw += s.bandwidth()
           s_cnt += 1
       if s_cnt > 0: rs.sbw = tot_bw/s_cnt
       else: rs.sbw = None
+      rs.strm_closed = s_cnt
+      rs.strm_try = len(rs.router.streams)+len(rs.router.detached_streams)
+      if rs.sbw:
+        tot_var = 0.0
+        for s in rs.router.streams:
+          if isinstance(s, ClosedStream):
+            tot_var += (s.bandwidth()-rs.sbw)*(s.bandwidth()-rs.sbw)
+        tot_var /= s_cnt
+        rs.sbw_dev = math.sqrt(tot_var)
       tc_session.add(rs)
     tc_session.commit()
   _compute_stats_query = Callable(_compute_stats_query)
@@ -384,24 +405,6 @@ class RouterStats(Entity):
     tc_session.commit()
   _compute_ratios = Callable(_compute_ratios)
 
-  def _compute_filtered_query(min_ratio): # broken.. don't use.
-    badrouters = RouterStats.query.filter(
-       RouterStats.sbw_ratio < min_ratio).column(RouterStats.router).all()
-  
-    for r in Router.query.all():
-      rs = r.stats
-      # XXX: This is totally wrong:
-      strmq = Router.query.filter_by(idhex=r.idhex).add_column(Router.streams).filter_by(row_type='closedstream')
-      for br in badrouters:
-        if br != r:
-          strmq = strmq.filter(not_(ClosedStream.circuit.routers.contains(r)))
-      rs.filt_sbw = strmq.avg(ClosedStream.read_bandwidth)
-    avg_sbw = RouterStats.query.filter('1=1').avg(RouterStats.filt_sbw)
-    for rs in RouterStats.query.all():
-      rs.filt_sbw_ratio = rs.filt_sbw/avg_sbw
-    tc_session.commit()
-  _compute_filtered_query = Callable(_compute_filtered_query)
-
   def _compute_filtered_relational(min_ratio, stats_clause, filter_clause):
     badrouters = RouterStats.query.filter(stats_clause).filter(filter_clause).\
                    filter(RouterStats.sbw_ratio < min_ratio).all()
@@ -419,8 +422,10 @@ class RouterStats(Entity):
               if br.router in s.circuit.routers:
                 skip = True
           if not skip:
-            tot_sbw += s.read_bandwidth   
-            sbw_cnt += 1
+            # Throw out outliers
+            if rs.strm_closed == 1 or s.bandwidth() >= rs.sbw-2*rs.sbw_dev:
+              tot_sbw += s.bandwidth()
+              sbw_cnt += 1
       if sbw_cnt: rs.filt_sbw = tot_sbw/sbw_cnt
       else: rs.filt_sbw = None
       tc_session.add(rs)
@@ -504,42 +509,48 @@ class RouterStats(Entity):
 
     def cvt(a,b,c=1):
       if type(a) == float: return round(a/c,b)
+      elif type(a) == int: return a
       elif type(a) == type(None): return "None"
       else: return type(a)
 
     sql_key = """SQLSupport Statistics:
-    CFR=Circ From Rate         CTR=Circ To Rate     CBR=Circ To/From Rate
-    CFE=Avg 1st Ext time (s)   SBW=Avg Stream BW    FBW=Filtered stream bw
-    RF=Circ From Ratio         RT=Circ To Ratio     RB=Circ To/From Ratio
-    RE=1st Ext Ratio           RS=Stream BW Ratio   RF=Filt Stream Ratio
-    PR=Percentile Rank\n\n"""
+    CF=Circ From Rate          CT=Circ To Rate      CB=Circ To/From Rate
+    CE=Avg 1st Ext time (s)    SB=Avg Stream BW     FB=Filtered stream bw
+    SD=Strm BW stddev          CC=Circ To Attempts  ST=Strem attempts
+    SC=Streams Closed OK       RF=Circ From Ratio   RT=Circ To Ratio     
+    RB=Circ To/From Ratio      RE=1st Ext Ratio     RS=Stream BW Ratio   
+    RF=Filt Stream Ratio       PR=Percentile Rank\n\n"""
  
     f.write(sql_key)
     f.write("Average Statistics:\n")
-    f.write("   CFR="+str(cvt(circ_from_rate,2))+" ")
-    f.write(" CTR="+str(cvt(circ_to_rate,2))+" ")
-    f.write(" CBR="+str(cvt(circ_bi_rate,2))+" ")
-    f.write(" CFE="+str(cvt(avg_first_ext,2))+" ")
-    f.write(" SBW="+str(cvt(sbw,2,1024))+" ")
-    f.write(" FBW="+str(cvt(filt_sbw,2,1024))+" ")
-    f.write(" PR="+str(cvt(percentile,2))+"\n\n\n")
+    f.write("   CF="+str(cvt(circ_from_rate,2)))
+    f.write("  CT="+str(cvt(circ_to_rate,2)))
+    f.write("  CB="+str(cvt(circ_bi_rate,2)))
+    f.write("  CE="+str(cvt(avg_first_ext,2)))
+    f.write("  SB="+str(cvt(sbw,2,1024)))
+    f.write("  FB="+str(cvt(filt_sbw,2,1024)))
+    f.write("  PR="+str(cvt(percentile,2))+"\n\n\n")
 
     for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
            order_by(order_by).all():
       f.write(s.router.idhex+" ("+s.router.nickname+")\n")
-      f.write("   CFR="+str(cvt(s.circ_from_rate,2))+" ")
-      f.write(" CTR="+str(cvt(s.circ_to_rate,2))+" ")
-      f.write(" CBR="+str(cvt(s.circ_bi_rate,2))+" ")
-      f.write(" CFE="+str(cvt(s.avg_first_ext,2))+" ")
-      f.write(" SBW="+str(cvt(s.sbw,2,1024))+" ")
-      f.write(" FBW="+str(cvt(s.filt_sbw,2,1024))+" ")
-      f.write(" PR="+str(cvt(s.percentile,1))+"\n")
-      f.write("   RF="+str(cvt(s.circ_from_ratio,2))+" ")
-      f.write(" RT="+str(cvt(s.circ_to_ratio,2))+" ")
-      f.write(" RB="+str(cvt(s.circ_bi_ratio,2))+" ")
-      f.write(" RE="+str(cvt(s.ext_ratio,2))+" ")
-      f.write(" RS="+str(cvt(s.sbw_ratio,2))+" ")
-      f.write(" RF="+str(cvt(s.filt_sbw_ratio,2))+"\n\n")
+      f.write("   CF="+str(cvt(s.circ_from_rate,2)))
+      f.write("  CT="+str(cvt(s.circ_to_rate,2)))
+      f.write("  CB="+str(cvt(s.circ_bi_rate,2)))
+      f.write("  CE="+str(cvt(s.avg_first_ext,2)))
+      f.write("  SB="+str(cvt(s.sbw,2,1024)))
+      f.write("  FB="+str(cvt(s.filt_sbw,2,1024)))
+      f.write("  SD="+str(cvt(s.sbw_dev,2,1024))+"\n")
+      f.write("   RF="+str(cvt(s.circ_from_ratio,2)))
+      f.write("  RT="+str(cvt(s.circ_to_ratio,2)))
+      f.write("  RB="+str(cvt(s.circ_bi_ratio,2)))
+      f.write("  RE="+str(cvt(s.ext_ratio,2)))
+      f.write("  RS="+str(cvt(s.sbw_ratio,2)))
+      f.write("  RF="+str(cvt(s.filt_sbw_ratio,2)))
+      f.write("  PR="+str(cvt(s.percentile,1))+"\n")
+      f.write("   CC="+str(cvt(s.circ_try_to,1)))
+      f.write("  ST="+str(cvt(s.strm_try, 1)))
+      f.write("  SC="+str(cvt(s.strm_closed, 1))+"\n\n")
 
     f.flush()
   write_stats = Callable(write_stats)  
