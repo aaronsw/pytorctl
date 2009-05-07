@@ -830,13 +830,6 @@ class StatsHandler(PathSupport.PathBuilder):
         self.strm_count += 1
         for r in self.circuits[s.circ_id].path: r.strm_chosen += 1
 
-        # Update bw stats. XXX: Don't do this for resolve streams
-        if self.streams[s.strm_id].attached_at:
-          lifespan = self.streams[s.strm_id].lifespan(s.arrived_at)
-          for r in self.streams[s.strm_id].circ.path:
-            r.bwstats.add_bw(self.streams[s.strm_id].bytes_written+
-                             self.streams[s.strm_id].bytes_read, lifespan)
-
         if self.streams[s.strm_id].failed:
           reason = self.streams[s.strm_id].failed_reason+":"+lreason+":"+rreason
 
@@ -846,6 +839,14 @@ class StatsHandler(PathSupport.PathBuilder):
         if (not self.streams[s.strm_id].failed
           and (lreason == "DONE" or (lreason == "END" and rreason == "DONE"))):
           r.strm_succeeded += 1
+
+          # Update bw stats. XXX: Don't do this for resolve streams
+          if self.streams[s.strm_id].attached_at:
+            lifespan = self.streams[s.strm_id].lifespan(s.arrived_at)
+            for r in self.streams[s.strm_id].circ.path:
+              r.bwstats.add_bw(self.streams[s.strm_id].bytes_written+
+                               self.streams[s.strm_id].bytes_read, lifespan)
+  
         else:
           self.strm_failed += 1
           self.count_stream_reason_failed(s, reason)

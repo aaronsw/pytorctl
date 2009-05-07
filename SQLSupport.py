@@ -185,11 +185,16 @@ class ClosedStream(Stream):
   read_bandwidth = Field(Float)
   write_bandwidth = Field(Float)
 
+  def tot_bytes(self):
+    return self.tot_read_bytes
+    #return self.tot_read_bytes+self.tot_write_bytes
+
   def bandwidth(self):
     return self.tot_bandwidth()
 
   def tot_bandwidth(self):
-    return self.read_bandwidth+self.write_bandwidth 
+    #return self.read_bandwidth+self.write_bandwidth 
+    return self.read_bandwidth
 
 class RouterStats(Entity):
   using_options(shortnames=True, session=tc_session, metadata=tc_metadata)
@@ -224,7 +229,7 @@ class RouterStats(Entity):
  
   strm_try = Field(Integer)
   strm_closed = Field(Integer)
- 
+
   sbw = Field(Float)
   sbw_dev = Field(Float)
   sbw_ratio = Field(Float)
@@ -324,11 +329,18 @@ class RouterStats(Entity):
                                 eagerload('router.streams')).all():
       tot_bw = 0.0
       s_cnt = 0
+      tot_bytes = 0.0
+      tot_duration = 0.0
       for s in rs.router.streams:
         if isinstance(s, ClosedStream):
+          tot_bytes += s.tot_bytes()
+          tot_duration += s.end_time - s.start_time
           tot_bw += s.bandwidth()
           s_cnt += 1
-      if s_cnt > 0: rs.sbw = tot_bw/s_cnt
+      # FIXME: Hrmm.. do we want to do weighted avg or pure avg here?
+      # If files are all the same size, it shouldn't matter..
+      if s_cnt > 0:
+        rs.sbw = tot_bw/s_cnt
       else: rs.sbw = None
       rs.strm_closed = s_cnt
       rs.strm_try = len(rs.router.streams)+len(rs.router.detached_streams)
@@ -422,8 +434,9 @@ class RouterStats(Entity):
               if br.router in s.circuit.routers:
                 skip = True
           if not skip:
-            # Throw out outliers
-            if rs.strm_closed == 1 or s.bandwidth() >= rs.sbw-2*rs.sbw_dev:
+            # Throw out outliers > 1 stddev 
+            # (too much variance for 2stddev to filter much)
+            if rs.strm_closed == 1 or s.bandwidth() >= rs.sbw-1*rs.sbw_dev:
               tot_sbw += s.bandwidth()
               sbw_cnt += 1
       if sbw_cnt: rs.filt_sbw = tot_sbw/sbw_cnt
@@ -818,7 +831,7 @@ class CircuitListener(TorCtl.PreEventListener):
 class StreamListener(CircuitListener):
   def stream_bw_event(self, s):
     strm = Stream.query.filter_by(strm_id = s.strm_id).first()
-    if strm:
+    if strm and strm.start_time and strm.start_time < s.arrived_at:
       plog("DEBUG", "Got stream bw: "+str(s.strm_id))
       strm.tot_read_bytes += s.bytes_read
       strm.tot_write_bytes += s.bytes_written
@@ -926,6 +939,7 @@ class StreamListener(CircuitListener):
           strm.read_bandwidth = strm.tot_read_bytes/(s.arrived_at-strm.start_time)
           strm.write_bandwidth = strm.tot_write_bytes/(s.arrived_at-strm.start_time)
           strm.end_time = s.arrived_at
+          plog("DEBUG", "Stream "+str(strm.strm_id)+" xmitted "+str(strm.tot_bytes()))
         strm.close_reason = reason
       tc_session.add(strm)
       tc_session.commit()
