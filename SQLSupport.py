@@ -284,12 +284,10 @@ class RouterStats(Entity):
     # http://www.sqlalchemy.org/docs/04/sqlexpression.html#sql_update
     to_s = select([func.count(Extension.id)], 
         and_(stats_clause, Extension.table.c.to_node_idhex
-             == RouterStats.table.c.router_idhex,
-             Extension.table.c.row_type=='extension')).as_scalar()
+             == RouterStats.table.c.router_idhex)).as_scalar()
     from_s = select([func.count(Extension.id)], 
         and_(stats_clause, Extension.table.c.from_node_idhex
-             == RouterStats.table.c.router_idhex,
-             Extension.table.c.row_type=='extension')).as_scalar()
+             == RouterStats.table.c.router_idhex)).as_scalar()
     f_to_s = select([func.count(FailedExtension.id)], 
         and_(stats_clause, FailedExtension.table.c.to_node_idhex
              == RouterStats.table.c.router_idhex,
