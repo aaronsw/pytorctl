@@ -294,6 +294,7 @@ class Router:
     self.contact = contact
     self.rate_limited = rate_limited
     self.orhash = orhash
+    self._generated = [] # For ExactUniformGenerator
 
   def __str__(self):
     s = self.idhex, self.nickname

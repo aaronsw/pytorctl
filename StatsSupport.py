@@ -654,6 +654,10 @@ class StatsHandler(PathSupport.PathBuilder):
 
     # FIXME: sort+print by circ extend time
 
+  def reset(self):
+    PathSupport.PathBuilder.reset(self)
+    self.reset_stats()
+
   def reset_stats(self):
     plog("DEBUG", "Resetting stats")
     self.circ_count = 0

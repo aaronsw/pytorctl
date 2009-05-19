@@ -624,6 +624,33 @@ class UniformGenerator(NodeGenerator):
     while not self.all_chosen():
       yield random.choice(self.routers)
      
+class ExactUniformGenerator(NodeGenerator):
+  """NodeGenerator that produces nodes randomly, yet strictly uniformly 
+     over time"""
+  def __init__(self, sorted_r, rstr_list, position=0):
+    self.position = position
+    NodeGenerator.__init__(self, sorted_r, rstr_list)  
+
+  def generate(self):
+    min_gen = min(map(lambda r: r._generated[self.position], self.routers))
+    choices = filter(lambda r: r._generated[self.position]==min_gen, 
+                       self.routers)
+    while not self.all_chosen():
+      r = random.choice(choices)
+      yield r
+      
+  def mark_chosen(self, r):
+    r._generated[self.position] += 1
+    NodeGenerator.mark_chosen(self, r)
+
+  def rebuild(self, sorted_r=None):
+    NodeGenerator.rebuild(self, sorted_r)
+    for r in self.rstr_routers:
+      lgen = len(r._generated)
+      if lgen < self.position+1:
+        for i in xrange(lgen, self.position+1):
+          r._generated.append(0)
+
 
 class OrderedExitGenerator(NodeGenerator):
   """NodeGenerator that produces exits in an ordered fashion for a 
@@ -1054,14 +1081,14 @@ class SelectionManager(BaseSelectionManager):
         exitgen = self.__ordered_exit_gen = \
           OrderedExitGenerator(80, sorted_r, self.exit_rstr)
     elif self.uniform:
-      exitgen = UniformGenerator(sorted_r, self.exit_rstr)
+      exitgen = ExactUniformGenerator(sorted_r, self.exit_rstr)
     else:
       exitgen = BwWeightedGenerator(sorted_r, self.exit_rstr, self.pathlen, exit=True)
 
     if self.uniform:
       self.path_selector = PathSelector(
-         UniformGenerator(sorted_r, entry_rstr),
-         UniformGenerator(sorted_r, mid_rstr),
+         ExactUniformGenerator(sorted_r, entry_rstr),
+         ExactUniformGenerator(sorted_r, mid_rstr),
          exitgen, self.path_rstr)
     else:
       # Remove ConserveExitsRestrictions for entry and middle positions
@@ -1213,7 +1240,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
   schedule_* functions to schedule work to be done in the thread
   of the EventHandler.
   """
-  def __init__(self, c, selmgr, RouterClass):
+  def __init__(self, c, selmgr, RouterClass=TorCtl.Router):
     """Constructor. 'c' is a Connection, 'selmgr' is a SelectionManager,
     and 'RouterClass' is a class that inherits from Router and is used
     to create annotated Routers."""
@@ -1244,6 +1271,15 @@ class PathBuilder(TorCtl.ConsensusTracker):
     Schedules a job to be run when a non-time critical event arrives.
     """
     self.low_prio_jobs.put(job)
+
+  def reset(self):
+    """
+    Resets accumulated state. Currently only clears the 
+    ExactUniformGenerator state.
+    """
+    for r in self.routers.itervalues():
+      for g in xrange(0, len(r._generated)):
+        r._generated[g] = 0
 
   def schedule_selmgr(self, job):
     """
