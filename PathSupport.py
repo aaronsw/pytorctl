@@ -1373,6 +1373,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
     for circ in self.circuit_list():
       if circ.built and not circ.requested_closed and not circ.dirty \
           and circ.circ_id not in badcircs:
+        # XXX: Fails for 'tor-resolve 530.19.6.80' -> NEWRESOLVE
         if circ.exit.will_exit_to(stream.host, stream.port):
           try:
             self.c.attach_stream(stream.strm_id, circ.circ_id)

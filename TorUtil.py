@@ -15,13 +15,13 @@ import binascii
 import sha
 import math
 import time
+import ConfigParser
 
 __all__ = ["Enum", "Enum2", "Callable", "sort_list", "quote", "escape_dots", "unescape_dots",
       "BufSock", "secret_to_key", "urandom_rng", "s2k_gen", "s2k_check", "plog", 
      "ListenSocket", "zprob", "logfile", "loglevel"]
 
-# TODO: Make functions to read these from a config file. This isn't
-# the right place for them either.. But at least it's unified.
+# TODO: This isn't the right place for these.. But at least it's unified.
 tor_port = 9060
 tor_host = '127.0.0.1'
 
@@ -31,6 +31,24 @@ control_pass = ""
 
 meta_port = 9052
 meta_host = '127.0.0.1'
+
+def read_config(filename):
+  config = ConfigParser.SafeConfigParser()
+  config.read(filename)
+  global tor_port, tor_host, control_port, control_pass, control_host
+  global meta_port, meta_host
+  global loglevel
+
+  tor_port = config.getint('TorCtl', 'tor_port')
+  meta_port = config.getint('TorCtl', 'meta_port')
+  control_port = config.getint('TorCtl', 'control_port')
+
+  tor_host = config.get('TorCtl', 'tor_host')
+  control_host = config.get('TorCtl', 'control_host')
+  meta_host = config.get('TorCtl', 'meta_host')
+  control_pass = config.get('TorCtl', 'control_pass')
+  loglevel = config.get('TorCtl', 'loglevel')
+
 
 class Enum:
   """ Defines an ordered dense name-to-number 1-1 mapping """
@@ -204,7 +222,6 @@ def s2k_check(secret, k):
 
   k =  binascii.a2b_hex(k[3:])
   return secret_to_key(secret, k[:9]) == k[9:]
-
 
 ## XXX: Make this a class?
 loglevel = "DEBUG"

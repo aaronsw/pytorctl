@@ -565,6 +565,36 @@ class RouterStats(Entity):
 
     f.flush()
   write_stats = Callable(write_stats)  
+  
+
+  def write_bws(f, pct_low=0, pct_high=100, order_by=None, recompute=False, stat_clause=None, filter_clause=None):
+    if not order_by:
+      order_by=RouterStats.avg_first_ext
+
+    if recompute:
+      RouterStats.compute(pct_low, pct_high, stat_clause, filter_clause)
+
+    pct_clause = and_(RouterStats.percentile >= pct_low, 
+                         RouterStats.percentile < pct_high)
+
+    # This is Fail City and sqlalchemy is running for mayor.
+    if sqlalchemy.__version__ < "0.5.0":
+      sbw = RouterStats.query.filter(pct_clause).filter(stat_clause).avg(RouterStats.sbw)
+      filt_sbw = RouterStats.query.filter(pct_clause).filter(stat_clause).avg(RouterStats.filt_sbw)
+    else:
+      sbw = tc_session.query(func.avg(RouterStats.sbw)).filter(pct_clause).filter(stat_clause).scalar()
+      filt_sbw = tc_session.query(func.avg(RouterStats.filt_sbw)).filter(pct_clause).filter(stat_clause).scalar()
+
+    f.write(str(int(time.time()))+"\n")
+
+    for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
+           order_by(order_by).all():
+      f.write("node_id=$"+s.router.idhex+" nick="+s.router.nickname)
+      f.write(" strm_bw="+str(s.sbw))
+      f.write(" filt_bw="+str(s.filt_sbw)+"\n")
+
+    f.flush()
+  write_bws = Callable(write_bws)  
     
 
 ##################### End Model ####################
