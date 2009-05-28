@@ -426,6 +426,7 @@ class Connection:
       self._eventQueue.put((time.time(), "CLOSE"))
       self._closed = 1
       self._s.close()
+      self._eventThread.join()
     finally:
       self._sendLock.release()
 
@@ -657,11 +658,22 @@ class Connection:
     return lines
 
   def authenticate(self, secret=""):
-    """Send an authenticating secret to Tor.  You'll need to call this
-       method before Tor can start.
+    """Sends an authenticating secret (password) to Tor.  You'll need to call 
+       this method (or authenticate_cookie) before Tor can start.
     """
     #hexstr = binascii.b2a_hex(secret)
     self.sendAndRecv("AUTHENTICATE \"%s\"\r\n"%secret)
+  
+  def authenticate_cookie(self, cookie):
+    """Sends an authentication cookie to Tor. This may either be a file or 
+       its contents.
+    """
+    
+    # read contents if provided a file
+    if type(cookie) == file: cookie = cookie.read()
+    
+    # unlike passwords the cookie contents isn't enclosed by quotes
+    self.sendAndRecv("AUTHENTICATE %s\r\n" % binascii.b2a_hex(cookie))
 
   def get_option(self, name):
     """Get the value of the configuration option named 'name'.  To

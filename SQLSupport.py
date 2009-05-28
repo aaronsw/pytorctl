@@ -587,6 +587,8 @@ class RouterStats(Entity):
 
     f.write(str(int(time.time()))+"\n")
 
+    # XXX: print out avg consensus bw too.. Hrmm, but only
+    # during active scan period..
     for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
            order_by(order_by).all():
       f.write("node_id=$"+s.router.idhex+" nick="+s.router.nickname)

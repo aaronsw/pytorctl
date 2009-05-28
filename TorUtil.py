@@ -225,7 +225,7 @@ def s2k_check(secret, k):
 
 ## XXX: Make this a class?
 loglevel = "DEBUG"
-loglevels = {"DEBUG" : 0, "INFO" : 1, "NOTICE" : 2, "WARN" : 3, "ERROR" : 4}
+loglevels = {"DEBUG" : 0, "INFO" : 1, "NOTICE" : 2, "WARN" : 3, "ERROR" : 4, "NONE" : 5}
 logfile=None
 
 def plog(level, msg): # XXX: Timestamps
