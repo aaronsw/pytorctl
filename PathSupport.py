@@ -1355,6 +1355,11 @@ class PathBuilder(TorCtl.ConsensusTracker):
         e.g. for generating paths without actually creating any circuits """
     return self.selmgr.select_path()
 
+  def close_all_streams(self, reason):
+    """ Close all open streams """
+    for strm in self.streams.itervalues():
+      self.c.close_stream(strm.strm_id, reason)
+
   def close_all_circuits(self):
     """ Close all open circuits """
     for circ in self.circuits.itervalues():

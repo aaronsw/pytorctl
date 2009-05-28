@@ -588,7 +588,7 @@ class RouterStats(Entity):
     f.write(str(int(time.time()))+"\n")
 
     def cvt(a,b,c=1):
-      if type(a) == float: return round(a/c,b)
+      if type(a) == float: return int(round(a/c,b))
       elif type(a) == int: return a
       elif type(a) == type(None): return "None"
       else: return type(a)
@@ -596,8 +596,8 @@ class RouterStats(Entity):
     for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
            order_by(order_by).all():
       f.write("node_id=$"+s.router.idhex+" nick="+s.router.nickname)
-      f.write(" strm_bw="+str(int(cvt(s.sbw,0))))
-      f.write(" filt_bw="+str(int(cvt(s.filt_sbw,0))))
+      f.write(" strm_bw="+str(cvt(s.sbw,0)))
+      f.write(" filt_bw="+str(cvt(s.filt_sbw,0)))
       f.write(" ns_bw="+str(int(cvt(s.avg_bw,0)))+"\n")
 
     f.flush()
