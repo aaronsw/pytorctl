@@ -462,7 +462,7 @@ class RouterStats(Entity):
   def reset():
     RouterStats.table.drop()
     RouterStats.table.create()
-    for r in Router.query.all(): # Is this needed?
+    for r in Router.query.all():
       rs = RouterStats()
       rs.router = r
       r.stats = rs
@@ -587,13 +587,18 @@ class RouterStats(Entity):
 
     f.write(str(int(time.time()))+"\n")
 
-    # XXX: print out avg consensus bw too.. Hrmm, but only
-    # during active scan period..
+    def cvt(a,b,c=1):
+      if type(a) == float: return round(a/c,b)
+      elif type(a) == int: return a
+      elif type(a) == type(None): return "None"
+      else: return type(a)
+
     for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
            order_by(order_by).all():
       f.write("node_id=$"+s.router.idhex+" nick="+s.router.nickname)
-      f.write(" strm_bw="+str(s.sbw))
-      f.write(" filt_bw="+str(s.filt_sbw)+"\n")
+      f.write(" strm_bw="+str(int(cvt(s.sbw,0))))
+      f.write(" filt_bw="+str(int(cvt(s.filt_sbw,0))))
+      f.write(" ns_bw="+str(int(cvt(s.avg_bw,0)))+"\n")
 
     f.flush()
   write_bws = Callable(write_bws)  
@@ -604,12 +609,12 @@ class RouterStats(Entity):
 #################### Model Support ################
 def reset_all():
   # Need to keep routers around.. 
-  for r in Router.query.all():
-    r.bw_history = [] # XXX: Is this sufficient/correct/necessary?
-    r.circuits = []
-    r.streams = []
-    r.stats = None
-    tc_session.add(r)
+  #for r in Router.query.all():
+  #  r.bw_history = [] # XXX: Is this sufficient/correct/necessary?
+  #  r.circuits = []
+  #  r.streams = []
+  #  r.stats = None
+  #  tc_session.add(r)
 
   BwHistory.table.drop() # Will drop subclasses
   Extension.table.drop()
@@ -623,6 +628,7 @@ def reset_all():
   Stream.table.create() 
   Circuit.table.create()
 
+  tc_session.clear()
   tc_session.commit()
 
 ##################### End Model Support ####################
@@ -689,11 +695,26 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
           tc_session.add(OP)
           tc_session.commit()
         self.update_consensus()
-      # So ghetto
+      # XXX: This hack exists because update_rank_history is expensive.
+      # However, even if we delay it till the end of the consensus update, 
+      # it still delays event processing for up to 30 seconds on a fast 
+      # machine.
+      # 
+      # The correct way to do this is give SQL processing
+      # to a dedicated worker thread that pulls events off of a secondary
+      # queue, that way we don't block stream handling on this processing.
+      # The problem is we are pretty heavily burdened with the need to 
+      # stay in sync with our parent event handler. A queue will break this 
+      # coupling (even if we could get all the locking right).
+      #
+      # A lighterweight hack might be to just make the scanners pause
+      # on a condition used to signal we are doing this (and other) heavy 
+      # lifting. We could have them possibly check self.last_desc_at..
       if e.arrived_at - self.last_desc_at > 30.0:
-        plog("INFO", "Newdesc timer is up. Assuming we have full consensus now")
-        self.last_desc_at = 0x7fffffff
-        self._update_rank_history(self.consensus.ns_map.iterkeys())
+        if not PathSupport.PathBuilder.is_urgent_event(e):
+          plog("INFO", "Newdesc timer is up. Assuming we have full consensus")
+          self.last_desc_at = 0x7fffffff
+          self._update_rank_history(self.consensus.ns_map.iterkeys())
 
   def new_consensus_event(self, n):
     if n.state == EVENT_STATE.POSTLISTEN:

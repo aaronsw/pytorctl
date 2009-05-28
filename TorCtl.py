@@ -89,7 +89,7 @@ class ErrorReply(TorCtlError):
 
 class NetworkStatus:
   "Filled in during NS events"
-  def __init__(self, nickname, idhash, orhash, updated, ip, orport, dirport, flags):
+  def __init__(self, nickname, idhash, orhash, updated, ip, orport, dirport, flags, bandwidth=None):
     self.nickname = nickname
     self.idhash = idhash
     self.orhash = orhash
@@ -98,6 +98,7 @@ class NetworkStatus:
     self.dirport = int(dirport)
     self.flags = flags
     self.idhex = (self.idhash + "=").decode("base64").encode("hex").upper()
+    self.bandwidth = bandwidth
     m = re.search(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)", updated)
     self.updated = datetime.datetime(*map(int, m.groups()))
 
@@ -275,10 +276,13 @@ class Router:
         self.__dict__[i] =  copy.deepcopy(args[0].__dict__[i])
       return
     else:
-      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published, contact, rate_limited, orhash) = args
+      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published, contact, rate_limited, orhash, ns_bandwidth) = args
     self.idhex = idhex
     self.nickname = name
-    self.bw = bw
+    if ns_bandwidth != None:
+      self.bw = ns_bandwidth
+    else:
+      self.bw = bw
     self.exitpolicy = exitpolicy
     self.flags = flags # Technicaly from NS doc
     self.down = down
@@ -366,7 +370,7 @@ class Router:
       plog("INFO", "No version and/or OS for router " + ns.nickname)
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
         ns.flags, ip, version, os, uptime, published, contact, rate_limited,
-        ns.orhash)
+        ns.orhash, ns.bandwidth)
   build_from_desc = Callable(build_from_desc)
 
   def update_to(self, new):
@@ -917,8 +921,12 @@ def parse_ns_body(data):
     m = re.search(r"^s((?:\s\S*)+)", nsline, re.M)
     flags = m.groups()
     flags = flags[0].strip().split(" ")
-    m = re.match(r"(\S+)\s(\S+)\s(\S+)\s(\S+\s\S+)\s(\S+)\s(\d+)\s(\d+)", nsline)
-    nslist.append(NetworkStatus(*(m.groups() + (flags,))))
+    m = re.match(r"(\S+)\s(\S+)\s(\S+)\s(\S+\s\S+)\s(\S+)\s(\d+)\s(\d+)", nsline)    
+    w = re.search(r"^w Bandwidth=(\d+)", nsline, re.M)
+    if w:
+      nslist.append(NetworkStatus(*(m.groups() + (flags,) + int(w.group(0)))))
+    else:
+      nslist.append(NetworkStatus(*(m.groups() + (flags,))))
   return nslist
 
 class EventSink:

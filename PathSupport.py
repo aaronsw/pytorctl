@@ -222,6 +222,22 @@ class PercentileRestriction(NodeRestriction):
 
   def __str__(self):
     return self.__class__.__name__+"("+str(self.pct_skip)+","+str(self.pct_fast)+")"
+
+class RankRestriction(NodeRestriction):
+  """Restriction to cut out a list-rank slice of the network."""
+  def __init__(self, rank_skip, rank_stop):
+    self.rank_skip = rank_skip
+    self.rank_stop = rank_stop
+
+  def r_is_ok(self, r):
+    "Returns true if r is in the boundaries (by rank)"
+    if r.list_rank < self.rank_skip: return False
+    elif r.list_rank > self.rank_stop: return False
+    
+    return True
+
+  def __str__(self):
+    return self.__class__.__name__+"("+str(self.rank_skip)+","+str(self.rank_stop)+")"
     
 class OSRestriction(NodeRestriction):
   "Restriction based on operating system"
@@ -1281,6 +1297,18 @@ class PathBuilder(TorCtl.ConsensusTracker):
       for g in xrange(0, len(r._generated)):
         r._generated[g] = 0
 
+  def is_urgent_event(event):
+    # If event is stream:NEW*/DETACHED or circ BUILT/FAILED, 
+    # it is high priority and requires immediate action.
+    if isinstance(event, TorCtl.CircuitEvent):
+      if event.status in ("BUILT", "FAILED", "CLOSED"):
+        return True
+    elif isinstance(event, TorCtl.StreamEvent):
+      if event.status in ("NEW", "NEWRESOLVE", "DETACHED"):
+        return True
+    return False
+  is_urgent_event = Callable(is_urgent_event)
+
   def schedule_selmgr(self, job):
     """
     Schedules an immediate job to be run before the next event is
@@ -1311,16 +1339,11 @@ class PathBuilder(TorCtl.ConsensusTracker):
         imm_job = self.low_prio_jobs.get_nowait()
         imm_job(self)
       return
-    
+
     # If event is stream:NEW*/DETACHED or circ BUILT/FAILED, 
     # don't run low prio jobs.. No need to delay streams for them.
-    if isinstance(event, TorCtl.CircuitEvent):
-      if event.status in ("BUILT", "FAILED"):
-        return
-    elif isinstance(event, TorCtl.StreamEvent):
-      if event.status in ("NEW", "NEWRESOLVE", "DETACHED"):
-        return
-    
+    if PathBuilder.is_urgent_event(event): return
+   
     # Do the low prio jobs one at a time in case a 
     # higher priority event is queued   
     if not self.low_prio_jobs.empty():
