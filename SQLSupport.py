@@ -638,9 +638,12 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
     TorCtl.DualEventListener.__init__(self)
     self.last_desc_at = time.time()-10.0
     self.consensus = None
+  
+  CONSENSUS_DONE = 0x7fffffff
 
   # TODO: What about non-running routers and uptime information?
   def _update_rank_history(self, idlist):
+    plog("INFO", "Consensus change... Updating rank history")
     for idhex in idlist:
       if idhex not in self.consensus.routers: continue
       rc = self.consensus.routers[idhex]
@@ -652,9 +655,11 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       r.bw_history.append(bwh)
       tc_session.add(bwh)
       tc_session.add(r)
+    plog("INFO", "Consensus history updated.")
     tc_session.commit()
  
   def _update_db(self, idlist):
+    plog("INFO", "Consensus change... Updating db")
     for idhex in idlist:
       if idhex in self.consensus.routers:
         rc = self.consensus.routers[idhex]
@@ -668,6 +673,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
  
         r.from_router(rc)
         tc_session.add(r)
+    plog("INFO", "Consensus db updated")
     tc_session.commit()
 
   def update_consensus(self):
@@ -713,8 +719,8 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       if e.arrived_at - self.last_desc_at > 30.0:
         if not PathSupport.PathBuilder.is_urgent_event(e):
           plog("INFO", "Newdesc timer is up. Assuming we have full consensus")
-          self.last_desc_at = 0x7fffffff
           self._update_rank_history(self.consensus.ns_map.iterkeys())
+          self.last_desc_at = ConsensusTrackerListener.CONSENSUS_DONE
 
   def new_consensus_event(self, n):
     if n.state == EVENT_STATE.POSTLISTEN:

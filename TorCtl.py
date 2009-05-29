@@ -108,6 +108,11 @@ class Event:
     self.arrived_at = 0
     self.state = EVENT_STATE.PRISTINE
 
+class TimerEvent(Event):
+  def __init__(self, event_name, type):
+    Event.__init__(self, event_name)
+    self.type = type
+
 class NetworkStatusEvent(Event):
   def __init__(self, event_name, nslist):
     Event.__init__(self, event_name)
@@ -584,12 +589,12 @@ class Connection:
       handler.pre_listeners = self._handler.pre_listeners
       handler.post_listeners = self._handler.post_listeners
     self._handler = handler
+    self._handler.c = self
     self._handleFn = handler._handle1
 
   def add_event_listener(self, listener):
     if not self._handler:
-      self._handler = EventHandler()
-      self._handleFn = self._handler._handle1
+      self.set_event_handler(EventHandler())
     self._handler.add_event_listener(listener)
 
   def _read_reply(self):
@@ -640,6 +645,20 @@ class Connection:
         amsg = "\n".join(lines[:2]) + "\n"
       self._debugFile.write(str(time.time())+"\t>>> "+amsg)
     self._s.write(msg)
+
+  def set_timer(self, in_seconds, type=None):
+    event = (("650", "TORCTL_TIMER", type),)
+    threading.Timer(in_seconds, lambda: 
+                  self._eventQueue.put((time.time(), event))).start()
+
+  def set_periodic_timer(self, every_seconds, type=None):
+    event = (("650", "TORCTL_TIMER", type),)
+    def notlambda():
+      plog("DEBUG", "Timer fired for type "+str(type))
+      self._eventQueue.put((time.time(), event))
+      self._eventQueue.put((time.time(), event))
+      threading.Timer(every_seconds, notlambda).start()
+    threading.Timer(every_seconds, notlambda).start()
 
   def sendAndRecv(self, msg="", expectedTypes=("250", "251")):
     """Helper: Send a command 'msg' to Tor, and wait for a command
@@ -942,6 +961,7 @@ class EventSink:
   def ns_event(self, event): pass
   def new_consensus_event(self, event): pass
   def address_mapped_event(self, event): pass
+  def timer_event(self, event): pass
 
 class EventListener(EventSink):
   """An 'EventListener' is a passive sink for parsed Tor events. It 
@@ -968,7 +988,8 @@ class EventListener(EventSink):
       "NEWDESC" : self.new_desc_event,
       "ADDRMAP" : self.address_mapped_event,
       "NS" : self.ns_event,
-      "NEWCONSENSUS" : self.new_consensus_event
+      "NEWCONSENSUS" : self.new_consensus_event,
+      "TORCTL_TIMER" : self.timer_event
       }
     self.parent_handler = None
     self._sabotage()
@@ -1010,8 +1031,10 @@ class EventHandler(EventSink):
       "NEWDESC" : self.new_desc_event,
       "ADDRMAP" : self.address_mapped_event,
       "NS" : self.ns_event,
-      "NEWCONSENSUS" : self.new_consensus_event
+      "NEWCONSENSUS" : self.new_consensus_event,
+      "TORCTL_TIMER" : self.timer_event
       }
+    self.c = None # Gets set by Connection.set_event_hanlder()
     self.pre_listeners = []
     self.post_listeners = []
 
@@ -1135,6 +1158,8 @@ class EventHandler(EventSink):
       event = NetworkStatusEvent(evtype, parse_ns_body(data))
     elif evtype == "NEWCONSENSUS":
       event = NewConsensusEvent(evtype, parse_ns_body(data))
+    elif evtype == "TORCTL_TIMER":
+      event = TimerEvent(evtype, data)
     else:
       event = UnknownEvent(evtype, body)
 
@@ -1205,6 +1230,9 @@ class EventHandler(EventSink):
     """
     pass
 
+  def timer_event(self, event):
+    pass
+
 class Consensus:
   """
   A Consensus is a pickleable container for the members of
@@ -1228,7 +1256,6 @@ class ConsensusTracker(EventHandler):
   def __init__(self, c, RouterClass=Router):
     EventHandler.__init__(self)
     c.set_event_handler(self)
-    self.c = c
     self.ns_map = {}
     self.routers = {}
     self.sorted_r = []

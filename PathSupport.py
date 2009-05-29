@@ -134,7 +134,7 @@ class NodeGenerator:
   def __init__(self, sorted_r, rstr_list):
     """Constructor. Takes a bandwidth-sorted list of Routers 'sorted_r' 
     and a NodeRestrictionList 'rstr_list'"""
-    self.rstr_list = rstr_list # Check me before you yield!
+    self.rstr_list = rstr_list
     self.rebuild(sorted_r)
 
   def reset_restriction(self, rstr_list):
@@ -263,7 +263,16 @@ class OSRestriction(NodeRestriction):
 
 class ConserveExitsRestriction(NodeRestriction):
   "Restriction to reject exits from selection"
-  def r_is_ok(self, r): return not "Exit" in r.flags
+  def __init__(self, exit_ports=None):
+    self.exit_ports = exit_ports
+
+  def r_is_ok(self, r):
+    if self.exit_ports:
+      for port in self.exit_ports:
+        if r.will_exit_to("255.255.255.255", port):
+          return False
+      return True
+    return not "Exit" in r.flags
 
   def __str__(self):
     return self.__class__.__name__+"()"
@@ -965,7 +974,7 @@ class SelectionManager(BaseSelectionManager):
   def __init__(self, pathlen, order_exits,
          percent_fast, percent_skip, min_bw, use_all_exits,
          uniform, use_exit, use_guards,geoip_config=None,
-         restrict_guards=False, extra_node_rstr=None):
+         restrict_guards=False, extra_node_rstr=None, exit_ports=None):
     BaseSelectionManager.__init__(self)
     self.__ordered_exit_gen = None 
     self.pathlen = pathlen
@@ -981,6 +990,7 @@ class SelectionManager(BaseSelectionManager):
     self.restrict_guards_only = restrict_guards
     self.bad_restrictions = False
     self.consensus = None
+    self.exit_ports = exit_ports
     self.extra_node_rstr=extra_node_rstr
 
   def reconfigure(self, consensus=None):
@@ -1021,12 +1031,12 @@ class SelectionManager(BaseSelectionManager):
 
     entry_rstr = NodeRestrictionList(
       [PercentileRestriction(self.percent_skip, self.percent_fast, sorted_r),
-       ConserveExitsRestriction(),
+       ConserveExitsRestriction(self.exit_ports),
        FlagsRestriction(entry_flags, [])]
     )
     mid_rstr = NodeRestrictionList(
       [PercentileRestriction(nonentry_skip, nonentry_fast, sorted_r),
-       ConserveExitsRestriction(),
+       ConserveExitsRestriction(self.exit_ports),
        FlagsRestriction(["Running","Fast"], [])]
 
     )
@@ -1334,10 +1344,10 @@ class PathBuilder(TorCtl.ConsensusTracker):
       self.do_reconfigure = False
     
     if self.run_all_jobs:
-      self.run_all_jobs = False
       while not self.low_prio_jobs.empty():
         imm_job = self.low_prio_jobs.get_nowait()
         imm_job(self)
+      self.run_all_jobs = False
       return
 
     # If event is stream:NEW*/DETACHED or circ BUILT/FAILED, 
