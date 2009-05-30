@@ -616,6 +616,8 @@ def reset_all():
   #  r.stats = None
   #  tc_session.add(r)
 
+  tc_session.clear()
+
   BwHistory.table.drop() # Will drop subclasses
   Extension.table.drop()
   Stream.table.drop() 
@@ -628,8 +630,13 @@ def reset_all():
   Stream.table.create() 
   Circuit.table.create()
 
-  tc_session.clear()
   tc_session.commit()
+
+  for r in Router.query.all():
+    if len(r.bw_history) or len(r.circuits) or len(r.streams) or r.stats:
+      plog("WARN", "Router still has dropped data!")
+
+  plog("NOTICE", "Reset all SQL stats")
 
 ##################### End Model Support ####################
 
@@ -638,6 +645,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
     TorCtl.DualEventListener.__init__(self)
     self.last_desc_at = time.time()-10.0
     self.consensus = None
+    self.wait_for_signal = False
   
   CONSENSUS_DONE = 0x7fffffff
 
@@ -653,12 +661,14 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       bwh = BwHistory(router=r, rank=rc.list_rank, bw=rc.bw, 
                       pub_time=r.published)
       r.bw_history.append(bwh)
-      tc_session.add(bwh)
+      #tc_session.add(bwh)
       tc_session.add(r)
     plog("INFO", "Consensus history updated.")
     tc_session.commit()
  
   def _update_db(self, idlist):
+    # FIXME: It is tempting to delay this as well, but we need
+    # this info to be present immediately for circuit construction...
     plog("INFO", "Consensus change... Updating db")
     for idhex in idlist:
       if idhex in self.consensus.routers:
@@ -677,6 +687,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
     tc_session.commit()
 
   def update_consensus(self):
+    plog("INFO", "Updating DB with full consensus.")
     self.consensus = self.parent_handler.current_consensus()
     self._update_db(self.consensus.ns_map.iterkeys())
 
@@ -716,7 +727,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       # A lighterweight hack might be to just make the scanners pause
       # on a condition used to signal we are doing this (and other) heavy 
       # lifting. We could have them possibly check self.last_desc_at..
-      if e.arrived_at - self.last_desc_at > 30.0:
+      if not self.wait_for_signal and e.arrived_at - self.last_desc_at > 30.0:
         if not PathSupport.PathBuilder.is_urgent_event(e):
           plog("INFO", "Newdesc timer is up. Assuming we have full consensus")
           self._update_rank_history(self.consensus.ns_map.iterkeys())
