@@ -1344,7 +1344,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
       self.do_reconfigure = False
     
     if self.run_all_jobs:
-      while not self.low_prio_jobs.empty():
+      while not self.low_prio_jobs.empty() and self.run_all_jobs:
         imm_job = self.low_prio_jobs.get_nowait()
         imm_job(self)
       self.run_all_jobs = False
