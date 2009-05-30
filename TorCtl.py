@@ -937,13 +937,13 @@ def parse_ns_body(data):
   nsgroups.pop(0)
   nslist = []
   for nsline in nsgroups:
-    m = re.search(r"^s((?:\s\S*)+)", nsline, re.M)
+    m = re.search(r"^s((?:[ ]\S*)+)", nsline, re.M)
     flags = m.groups()
     flags = flags[0].strip().split(" ")
     m = re.match(r"(\S+)\s(\S+)\s(\S+)\s(\S+\s\S+)\s(\S+)\s(\d+)\s(\d+)", nsline)    
     w = re.search(r"^w Bandwidth=(\d+)", nsline, re.M)
     if w:
-      nslist.append(NetworkStatus(*(m.groups() + (flags,) + int(w.group(0)))))
+      nslist.append(NetworkStatus(*(m.groups() + (flags,) + (int(w.group(1)),))))
     else:
       nslist.append(NetworkStatus(*(m.groups() + (flags,))))
   return nslist
@@ -1079,7 +1079,10 @@ class EventHandler(EventSink):
           purpose = ""
           path=[]
         else:
-          path = path.strip().split(",")
+          path_verb = path.strip().split(",")
+          path = []
+          for p in path_verb:
+            path.append(p.replace("~", "=").split("=")[0])
       else:
         path = []
 
@@ -1142,7 +1145,11 @@ class EventHandler(EventSink):
     elif evtype in ("DEBUG", "INFO", "NOTICE", "WARN", "ERR"):
       event = LogEvent(evtype, body)
     elif evtype == "NEWDESC":
-      event = NewDescEvent(evtype, body.split(" "))
+      ids_verb = body.split(" ")
+      ids = []
+      for i in ids_verb:
+        ids.append(i.replace("~", "=").split("=")[0])
+      event = NewDescEvent(evtype, ids)
     elif evtype == "ADDRMAP":
       # TODO: Also parse errors and GMTExpiry
       m = re.match(r'(\S+)\s+(\S+)\s+(\"[^"]+\"|\w+)', body)
