@@ -609,13 +609,17 @@ class RouterStats(Entity):
 #################### Model Support ################
 def reset_all():
   # Need to keep routers around.. 
-  #for r in Router.query.all():
-  #  r.bw_history = [] # XXX: Is this sufficient/correct/necessary?
-  #  r.circuits = []
-  #  r.streams = []
-  #  r.stats = None
-  #  tc_session.add(r)
+  for r in Router.query.all():
+    # This appears to be needed. the relation tables do not get dropped 
+    # automatically.
+    r.circuits = []
+    r.streams = []
+    r.detached_streams = []
+    r.bw_history = [] 
+    r.stats = None
+    tc_session.add(r)
 
+  tc_session.commit()
   tc_session.clear()
 
   BwHistory.table.drop() # Will drop subclasses
@@ -632,9 +636,9 @@ def reset_all():
 
   tc_session.commit()
 
-  for r in Router.query.all():
-    if len(r.bw_history) or len(r.circuits) or len(r.streams) or r.stats:
-      plog("WARN", "Router still has dropped data!")
+  #for r in Router.query.all():
+  #  if len(r.bw_history) or len(r.circuits) or len(r.streams) or r.stats:
+  #    plog("WARN", "Router still has dropped data!")
 
   plog("NOTICE", "Reset all SQL stats")
 
