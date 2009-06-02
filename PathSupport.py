@@ -1304,6 +1304,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
     Resets accumulated state. Currently only clears the 
     ExactUniformGenerator state.
     """
+    plog("DEBUG", "Resetting _generated values for ExactUniformGenerator")
     for r in self.routers.itervalues():
       for g in xrange(0, len(r._generated)):
         r._generated[g] = 0

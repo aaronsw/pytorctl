@@ -460,6 +460,7 @@ class RouterStats(Entity):
   _compute_filtered_ratios = Callable(_compute_filtered_ratios)
 
   def reset():
+    tc_session.clear()
     RouterStats.table.drop()
     RouterStats.table.create()
     for r in Router.query.all():
@@ -467,7 +468,6 @@ class RouterStats(Entity):
       rs.router = r
       r.stats = rs
       tc_session.add(r)
-    tc_session.clear()
     tc_session.commit()
   reset = Callable(reset)
 

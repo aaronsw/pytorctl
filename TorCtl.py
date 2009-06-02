@@ -385,7 +385,7 @@ class Router:
       plog("ERROR", "Update of router "+self.nickname+"changes idhex!")
     plog("DEBUG", "Updating refcount "+str(self.refcount)+" for "+self.idhex)
     for i in new.__dict__.iterkeys():
-      if i == "refcount": continue
+      if i == "refcount" or i == "_generated": continue
       self.__dict__[i] = new.__dict__[i]
     plog("DEBUG", "Updated refcount "+str(self.refcount)+" for "+self.idhex)
 
