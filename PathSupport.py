@@ -669,6 +669,7 @@ class ExactUniformGenerator(NodeGenerator):
     NodeGenerator.mark_chosen(self, r)
 
   def rebuild(self, sorted_r=None):
+    plog("DEBUG", "Rebuilding ExactUniformGenerator")
     NodeGenerator.rebuild(self, sorted_r)
     for r in self.rstr_routers:
       lgen = len(r._generated)
@@ -1019,8 +1020,8 @@ class SelectionManager(BaseSelectionManager):
       self.path_rstr = PathRestrictionList(
            [Subnet16Restriction(), UniqueRestriction()])
   
-    if self.use_guards: entry_flags = ["Guard", "Valid", "Running"]
-    else: entry_flags = ["Valid", "Running"]
+    if self.use_guards: entry_flags = ["Guard", "Valid", "Running", "Fast"]
+    else: entry_flags = ["Valid", "Running", "Fast"]
 
     if self.restrict_guards_only:
       nonentry_skip = 0
@@ -1368,7 +1369,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
   def close_all_streams(self, reason):
     """ Close all open streams """
     for strm in self.streams.itervalues():
-      self.c.close_stream(strm.strm_id, reason)
+      if not strm.ignored:
+        self.c.close_stream(strm.strm_id, reason)
 
   def close_all_circuits(self):
     """ Close all open circuits """
@@ -1513,7 +1515,11 @@ class PathBuilder(TorCtl.ConsensusTracker):
 
     # Hack to ignore Tor-handled streams (Currently only directory streams)
     if s.strm_id in self.streams and self.streams[s.strm_id].ignored:
-      plog("DEBUG", "Ignoring stream: " + str(s.strm_id))
+      if s.status == "CLOSED":
+        plog("DEBUG", "Deleting ignored stream: " + str(s.strm_id))
+        del self.streams[s.strm_id]
+      else:
+        plog("DEBUG", "Ignoring stream: " + str(s.strm_id))
       return
 
     # XXX: Copy s.circ_id==0 check+reset from StatsSupport here too?
