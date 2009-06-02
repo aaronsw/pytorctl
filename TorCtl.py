@@ -1148,7 +1148,7 @@ class EventHandler(EventSink):
       ids_verb = body.split(" ")
       ids = []
       for i in ids_verb:
-        ids.append(i.replace("~", "=").split("=")[0])
+        ids.append(i.replace("~", "=").split("=")[0].replace("$",""))
       event = NewDescEvent(evtype, ids)
     elif evtype == "ADDRMAP":
       # TODO: Also parse errors and GMTExpiry
