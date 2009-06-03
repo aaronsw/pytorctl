@@ -52,6 +52,11 @@ def setup_db(db_uri, echo=False, drop=False):
   if drop: drop_all()
   create_all()
 
+  if sqlalchemy.__version__ < "0.5.0":
+    # DIAF SQLAlchemy. A token gesture at backwards compatibility
+    # wouldn't kill you, you know.
+    tc_session.add = tc_session.save_or_update
+
 class Router(Entity):
   using_options(shortnames=True, order_by='-published', session=tc_session, metadata=tc_metadata)
   using_mapper_options(save_on_init=False)
