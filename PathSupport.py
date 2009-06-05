@@ -646,6 +646,7 @@ class OceanPhobicRestriction(PathRestriction):
 class UniformGenerator(NodeGenerator):
   """NodeGenerator that produces nodes in the uniform distribution"""
   def generate(self):
+    # XXX: hrmm.. this is not really the right thing to check
     while not self.all_chosen():
       yield random.choice(self.routers)
      
@@ -660,10 +661,17 @@ class ExactUniformGenerator(NodeGenerator):
     min_gen = min(map(lambda r: r._generated[self.position], self.routers))
     choices = filter(lambda r: r._generated[self.position]==min_gen, 
                        self.routers)
-    while not self.all_chosen():
+    while choices:
       r = random.choice(choices)
       yield r
-      
+      choices.remove(r)
+
+    choices = filter(lambda r: r._generated[self.position]==min_gen,
+                       self.routers)
+    plog("NOTICE", "Ran out of choices in ExactUniformGenerator. Incrementing nodes")
+    for r in choices:
+      r._generated[self.position] += 1
+
   def mark_chosen(self, r):
     r._generated[self.position] += 1
     NodeGenerator.mark_chosen(self, r)
@@ -868,9 +876,12 @@ class PathSelector:
     entry = self.entry_gen.generate()
     mid = self.mid_gen.generate()
     ext = self.exit_gen.generate()
+      
+    plog("DEBUG", "Selecting path..")
 
     while True:
       path = []
+      plog("DEBUG", "Building path..")
       try:
         if pathlen == 1:
           path = [ext.next()]
@@ -884,15 +895,18 @@ class PathSelector:
           for i in xrange(1, pathlen-1):
             self.mid_gen.mark_chosen(path[i])
           self.exit_gen.mark_chosen(path[pathlen-1])
+          plog("DEBUG", "Marked path.")
           break
+        else:
+          plog("DEBUG", "Path rejected by path restrictions.")
       except StopIteration:
         plog("NOTICE", "Ran out of routers during buildpath..");
         self.entry_gen.rewind()
         self.mid_gen.rewind()
         self.exit_gen.rewind()
         entry = self.entry_gen.generate()
-        mid = self.entry_gen.generate()
-        ext = self.entry_gen.generate()
+        mid = self.mid_gen.generate()
+        ext = self.exit_gen.generate()
     for r in path:
       r.refcount += 1
       plog("DEBUG", "Circ refcount "+str(r.refcount)+" for "+r.idhex)
