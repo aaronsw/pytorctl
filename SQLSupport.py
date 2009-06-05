@@ -492,7 +492,7 @@ class RouterStats(Entity):
     tc_session.commit()
   compute = Callable(compute)  
 
-  def write_stats(f, pct_low=0, pct_high=100, order_by=None, recompute=False, stat_clause=None, filter_clause=None):
+  def write_stats(f, pct_low=0, pct_high=100, order_by=None, recompute=False, stat_clause=None, filter_clause=None, disp_clause=None):
 
     if not order_by:
       order_by=RouterStats.avg_first_ext
@@ -548,7 +548,7 @@ class RouterStats(Entity):
     f.write("  PR="+str(cvt(percentile,2))+"\n\n\n")
 
     for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
-           order_by(order_by).all():
+             filter(disp_clause).order_by(order_by).all():
       f.write(s.router.idhex+" ("+s.router.nickname+")\n")
       f.write("   CF="+str(cvt(s.circ_from_rate,2)))
       f.write("  CT="+str(cvt(s.circ_to_rate,2)))
@@ -572,7 +572,7 @@ class RouterStats(Entity):
   write_stats = Callable(write_stats)  
   
 
-  def write_bws(f, pct_low=0, pct_high=100, order_by=None, recompute=False, stat_clause=None, filter_clause=None):
+  def write_bws(f, pct_low=0, pct_high=100, order_by=None, recompute=False, stat_clause=None, filter_clause=None, disp_clause=None):
     if not order_by:
       order_by=RouterStats.avg_first_ext
 
@@ -599,7 +599,7 @@ class RouterStats(Entity):
       else: return type(a)
 
     for s in RouterStats.query.filter(pct_clause).filter(stat_clause).\
-           order_by(order_by).all():
+           filter(disp_clause).order_by(order_by).all():
       f.write("node_id=$"+s.router.idhex+" nick="+s.router.nickname)
       f.write(" strm_bw="+str(cvt(s.sbw,0)))
       f.write(" filt_bw="+str(cvt(s.filt_sbw,0)))
