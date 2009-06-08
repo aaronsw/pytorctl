@@ -53,7 +53,7 @@ EVENT_TYPE = Enum2(
           ORCONN="ORCONN",
           STREAM_BW="STREAM_BW",
           BW="BW",
-		  NS="NS",
+          NS="NS",
           NEWCONSENSUS="NEWCONSENSUS",
           NEWDESC="NEWDESC",
           ADDRMAP="ADDRMAP",
@@ -296,8 +296,7 @@ class Router:
     self.os = os
     self.list_rank = 0 # position in a sorted list of routers.
     self.uptime = uptime
-    m = re.search(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)", published)
-    self.published = datetime.datetime(*map(int, m.groups()))
+    self.published = published
     self.refcount = 0 # How many open circs are we currently in?
     self.deleted = False # Has Tor already deleted this descriptor?
     self.contact = contact
@@ -362,7 +361,8 @@ class Router:
       elif rt:
         router,ip = rt.groups()
       elif pb:
-        published = pb.group(1)
+        published = datetime.datetime.strptime(pb.group(1)+" UTC",
+                                "20%y-%m-%d %H:%M:%S %Z")
       elif ct:
         contact = ct.group(1)
     if router != ns.nickname:
