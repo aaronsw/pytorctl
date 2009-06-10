@@ -943,7 +943,7 @@ def parse_ns_body(data):
     m = re.match(r"(\S+)\s(\S+)\s(\S+)\s(\S+\s\S+)\s(\S+)\s(\d+)\s(\d+)", nsline)    
     w = re.search(r"^w Bandwidth=(\d+)", nsline, re.M)
     if w:
-      nslist.append(NetworkStatus(*(m.groups() + (flags,) + (int(w.group(1)),))))
+      nslist.append(NetworkStatus(*(m.groups()+(flags,)+(int(w.group(1))*1024,))))
     else:
       nslist.append(NetworkStatus(*(m.groups() + (flags,))))
   return nslist

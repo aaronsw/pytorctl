@@ -1034,8 +1034,8 @@ class SelectionManager(BaseSelectionManager):
       self.path_rstr = PathRestrictionList(
            [Subnet16Restriction(), UniqueRestriction()])
   
-    if self.use_guards: entry_flags = ["Guard", "Valid", "Running", "Fast"]
-    else: entry_flags = ["Valid", "Running", "Fast"]
+    if self.use_guards: entry_flags = ["Guard", "Running", "Fast"]
+    else: entry_flags = ["Running", "Fast"]
 
     if self.restrict_guards_only:
       nonentry_skip = 0
@@ -1046,12 +1046,16 @@ class SelectionManager(BaseSelectionManager):
 
     entry_rstr = NodeRestrictionList(
       [PercentileRestriction(self.percent_skip, self.percent_fast, sorted_r),
-       ConserveExitsRestriction(self.exit_ports),
+       OrNodeRestriction(
+           [FlagsRestriction(["BadExit"]),
+           ConserveExitsRestriction(self.exit_ports)]),
        FlagsRestriction(entry_flags, [])]
     )
     mid_rstr = NodeRestrictionList(
       [PercentileRestriction(nonentry_skip, nonentry_fast, sorted_r),
-       ConserveExitsRestriction(self.exit_ports),
+       OrNodeRestriction(
+           [FlagsRestriction(["BadExit"]),
+           ConserveExitsRestriction(self.exit_ports)]),
        FlagsRestriction(["Running","Fast"], [])]
 
     )
@@ -1062,11 +1066,11 @@ class SelectionManager(BaseSelectionManager):
       self.exit_rstr = NodeRestrictionList([IdHexRestriction(self.exit_id)])
     elif self.use_all_exits:
       self.exit_rstr = NodeRestrictionList(
-        [FlagsRestriction(["Valid", "Running","Fast"], ["BadExit"])])
+        [FlagsRestriction(["Running","Fast"], ["BadExit"])])
     else:
       self.exit_rstr = NodeRestrictionList(
         [PercentileRestriction(nonentry_skip, nonentry_fast, sorted_r),
-         FlagsRestriction(["Valid", "Running","Fast"], ["BadExit"])])
+         FlagsRestriction(["Running","Fast"], ["BadExit"])])
 
     if self.extra_node_rstr:
       entry_rstr.add_restriction(self.extra_node_rstr)
@@ -1132,9 +1136,12 @@ class SelectionManager(BaseSelectionManager):
          ExactUniformGenerator(sorted_r, mid_rstr),
          exitgen, self.path_rstr)
     else:
-      # Remove ConserveExitsRestrictions for entry and middle positions
-      entry_rstr.del_restriction(ConserveExitsRestriction)
-      mid_rstr.del_restriction(ConserveExitsRestriction)
+      # Remove ConserveExitsRestriction for entry and middle positions
+      # by removing the OrNodeRestriction that contains it...
+      # FIXME: This is a landmine for a poor soul to hit.
+      # Then again, most of the rest of this function is, too.
+      entry_rstr.del_restriction(OrNodeRestriction)
+      mid_rstr.del_restriction(OrNodeRestriction)
       self.path_selector = PathSelector(
          BwWeightedGenerator(sorted_r, entry_rstr, self.pathlen,
                              guard=self.use_guards),
