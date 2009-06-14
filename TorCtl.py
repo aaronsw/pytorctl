@@ -333,7 +333,7 @@ class Router:
     for line in desc:
       rt = re.search(r"^router (\S+) (\S+)", line)
       fp = re.search(r"^opt fingerprint (.+).*on (\S+)", line)
-      pl = re.search(r"^platform Tor (\S+).*on (\S+)", line)
+      pl = re.search(r"^platform Tor (\S+).*on ([\S\s]+)", line)
       ac = re.search(r"^accept (\S+):([^-]+)(?:-(\d+))?", line)
       rj = re.search(r"^reject (\S+):([^-]+)(?:-(\d+))?", line)
       bw = re.search(r"^bandwidth (\d+) \d+ (\d+)", line)
