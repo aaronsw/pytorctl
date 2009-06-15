@@ -1044,6 +1044,8 @@ class SelectionManager(BaseSelectionManager):
       nonentry_skip = self.percent_skip
       nonentry_fast = self.percent_fast
 
+    # XXX: sometimes we want the ability to do uniform scans
+    # without the conserve exit restrictions..
     entry_rstr = NodeRestrictionList(
       [PercentileRestriction(self.percent_skip, self.percent_fast, sorted_r),
        OrNodeRestriction(
