@@ -32,51 +32,77 @@ control_pass = ""
 meta_port = 9052
 meta_host = '127.0.0.1'
 
-def dump_class_ref_counts(track_referers=True, cutoff=100, rcutoff=1,
+class Referrer:
+  def __init__(self, cl):
+    self.referrers = {}
+    self.cl_name = cl
+    self.count = 0
+
+  def recurse_store(self, gc, obj, depth, max_depth):
+    if depth >= max_depth: return
+    for r in gc.get_referrers(obj):
+      if hasattr(r, "__class__"):
+        cl = r.__class__.__name__
+        # Skip frames and list iterators.. prob just us
+        if cl in ("frame", "listiterator"): continue 
+        if cl not in self.referrers:
+          self.referrers[cl] = Referrer(cl)
+        self.referrers[cl].count += 1
+        self.referrers[cl].recurse_store(gc, r, depth+1, max_depth)
+
+  def recurse_print(self, rcutoff, depth=""):
+    refs = self.referrers.keys()
+    refs.sort(lambda x, y: self.referrers[y].count - self.referrers[x].count)
+    for r in refs:
+      if self.referrers[r].count > rcutoff:
+        plog("NOTICE", "GC:  "+depth+"Refed by "+r+": "+str(self.referrers[r].count))
+        self.referrers[r].recurse_print(rcutoff, depth+" ")
+
+def dump_class_ref_counts(referrer_depth=2, cutoff=500, rcutoff=1,
         ignore=('tuple', 'list', 'function', 'dict',
-                 'builtin_function_or_method')):
+                 'builtin_function_or_method',
+                 'wrapper_descriptor')):
   """ Debugging function to track down types of objects
       that cannot be garbage collected because we hold refs to them 
       somewhere."""
   import gc
-  __dump_class_ref_counts(gc, track_referers, cutoff, rcutoff, ignore)
+  __dump_class_ref_counts(gc, referrer_depth, cutoff, rcutoff, ignore)
   gc.collect()
   plog("NOTICE", "GC: Done.")
 
-def __dump_class_ref_counts(gc, referers, cutoff, rcutoff, ignore):
+def __dump_class_ref_counts(gc, referrer_depth, cutoff, rcutoff, ignore):
   """ loil
   """
   plog("NOTICE", "GC: Gathering garbage collection stats...")
   uncollectable = gc.collect()
   class_counts = {}
-  ref_counts = {}
+  referrers = {}
   plog("NOTICE", "GC: Uncollectable objects: "+str(uncollectable))
-  for obj in gc.get_objects():
+  objs = gc.get_objects()
+  for obj in objs:
     if hasattr(obj, "__class__"):
       cl = obj.__class__.__name__
       if cl in ignore: continue
       if cl not in class_counts:
         class_counts[cl] = 0
+        referrers[cl] = Referrer(cl)
       class_counts[cl] += 1
-      if referers:
-        for r in gc.get_referrers(obj):
-          if hasattr(r, "__class__"):
-            if cl not in ref_counts:
-              ref_counts[cl] = {}
-            if r.__class__.__name__ not in ref_counts[cl]:
-              ref_counts[cl][r.__class__.__name__] = 0
-            ref_counts[cl][r.__class__.__name__] += 1
+  if referrer_depth:
+    for obj in objs:
+      if hasattr(obj, "__class__"):
+        cl = obj.__class__.__name__
+        if cl in ignore: continue
+        if class_counts[cl] > cutoff:
+          referrers[cl].recurse_store(gc, obj, 0, referrer_depth)
   classes = class_counts.keys()
   classes.sort(lambda x, y: class_counts[y] - class_counts[x])
   for c in classes:
     if class_counts[c] < cutoff: continue
     plog("NOTICE", "GC: Class "+c+": "+str(class_counts[c]))
-    if referers:
-      refs = ref_counts[c].keys()
-      refs.sort(lambda x, y: ref_counts[c][y] - ref_counts[c][x])
-      for r in refs:
-        if ref_counts[c][r] < rcutoff: continue
-        plog("NOTICE", "GC:   Refed by "+r+": "+str(ref_counts[c][r]))
+    if referrer_depth:
+      referrers[c].recurse_print(rcutoff)
+
+
 
 def read_config(filename):
   config = ConfigParser.SafeConfigParser()
