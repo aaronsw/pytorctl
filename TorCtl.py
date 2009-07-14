@@ -361,8 +361,8 @@ class Router:
       elif rt:
         router,ip = rt.groups()
       elif pb:
-        published = datetime.datetime.strptime(pb.group(1)+" UTC",
-                                "20%y-%m-%d %H:%M:%S %Z")
+        t = time.strptime(pb.group(1)+" UTC", "20%y-%m-%d %H:%M:%S %Z")
+        published = datetime.datetime(*t[0:6])
       elif ct:
         contact = ct.group(1)
     if router != ns.nickname:
