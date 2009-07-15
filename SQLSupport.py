@@ -432,16 +432,17 @@ class RouterStats(Entity):
       for s in rs.router.streams:
         if isinstance(s, ClosedStream):
           skip = False
-          for br in badrouters:
-            if br != rs:
-              if br.router in s.circuit.routers:
-                skip = True
+          #for br in badrouters:
+          #  if br != rs:
+          #    if br.router in s.circuit.routers:
+          #      skip = True
           if not skip:
-            # Throw out outliers > 1 stddev 
-            # (too much variance for 2stddev to filter much)
-            if rs.strm_closed == 1 or s.bandwidth() >= rs.sbw-1*rs.sbw_dev:
+            # Throw out outliers < mean 
+            # (too much variance for stddev to filter much)
+            if rs.strm_closed == 1 or s.bandwidth() >= rs.sbw:
               tot_sbw += s.bandwidth()
               sbw_cnt += 1
+
       if sbw_cnt: rs.filt_sbw = tot_sbw/sbw_cnt
       else: rs.filt_sbw = None
       tc_session.add(rs)
