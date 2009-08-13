@@ -25,4 +25,4 @@ creation, stream bandwidth, and circuit failure information.
 """
 
 __all__ = ["TorUtil", "GeoIPSupport", "PathSupport", "TorCtl", "StatsSupport",
-           "SQLSupport"]
+           "SQLSupport", "ScanSupport"]
