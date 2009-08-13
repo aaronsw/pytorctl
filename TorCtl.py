@@ -473,7 +473,7 @@ class Connection:
             self._err((e.__class__, e, None))
           return
         else:
-		  isEvent = 0
+          isEvent = 0
 
       if isEvent:
         if self._handler is not None:
