@@ -143,7 +143,9 @@ class ScanHandler(PathSupport.PathBuilder):
     return cond._rank
 
   def get_exit_node(self):
-    return copy.copy(self.last_exit) # GIL FTW
+    ret = copy.copy(self.last_exit) # GIL FTW
+    plog("DEBUG", "Got last exit of "+ret.idhex)
+    return ret
 
   def set_exit_node(self, arg):
     cond = threading.Condition()

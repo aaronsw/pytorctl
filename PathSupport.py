@@ -1180,6 +1180,7 @@ class SelectionManager(BaseSelectionManager):
       self.bad_restrictions = True
     else:
       self.exit_rstr.add_restriction(IdHexRestriction(self.exit_id))
+      plog("DEBUG", "Added exit restriction for "+self.exit_id)
       try:
         self.path_selector.exit_gen.rebuild()
         self.bad_restrictions = False
@@ -1481,6 +1482,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
       circ.pending_streams.extend(unattached_streams)
       self.circuits[circ.circ_id] = circ
     self.last_exit = circ.exit
+    plog("DEBUG", "Set last exit to "+self.last_exit.idhex)
 
   def circ_status_event(self, c):
     output = [c.event_name, str(c.circ_id), c.status]
