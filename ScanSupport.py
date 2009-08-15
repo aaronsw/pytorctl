@@ -144,7 +144,10 @@ class ScanHandler(PathSupport.PathBuilder):
 
   def get_exit_node(self):
     ret = copy.copy(self.last_exit) # GIL FTW
-    plog("DEBUG", "Got last exit of "+ret.idhex)
+    if ret:
+      plog("DEBUG", "Got last exit of "+ret.idhex)
+    else:
+      plog("DEBUG", "No last exit.")
     return ret
 
   def set_exit_node(self, arg):
