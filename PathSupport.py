@@ -1395,7 +1395,11 @@ class PathBuilder(TorCtl.ConsensusTracker):
     """ Close all open streams """
     for strm in self.streams.itervalues():
       if not strm.ignored:
-        self.c.close_stream(strm.strm_id, reason)
+        try:
+          self.c.close_stream(strm.strm_id, reason)
+        except TorCtl.ErrorReply, e:
+          # This can happen. Streams can timeout before this call.
+          plog("NOTICE", "Error closing stream "+str(strm.strm_id)+": "+str(e))
 
   def close_all_circuits(self):
     """ Close all open circuits """

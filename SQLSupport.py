@@ -931,7 +931,9 @@ class StreamListener(CircuitListener):
       return
 
     strm = Stream.query.filter_by(strm_id = s.strm_id).first()
-    if self.track_parent and s.strm_id not in self.parent_handler.streams:
+    if self.track_parent and \
+      (s.strm_id not in self.parent_handler.streams or \
+           self.parent_handler.streams[s.strm_id].ignored):
       if strm:
         tc_session.delete(strm)
         tc_session.commit()
