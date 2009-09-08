@@ -439,15 +439,20 @@ class Connection:
     finally:
       self._sendLock.release()
 
+  def is_live(self):
+    """ Returns true iff the connection is alive and healthy"""
+    return self._thread.isAlive() and self._eventThread.isAlive() and not \
+           self._closed
+
   def launch_thread(self, daemon=1):
     """Launch a background thread to handle messages from the Tor process."""
     assert self._thread is None
-    t = threading.Thread(target=self._loop)
+    t = threading.Thread(target=self._loop, name="TorLoop")
     if daemon:
       t.setDaemon(daemon)
     t.start()
     self._thread = t
-    t = threading.Thread(target=self._eventLoop)
+    t = threading.Thread(target=self._eventLoop, name="EventLoop")
     if daemon:
       t.setDaemon(daemon)
     t.start()

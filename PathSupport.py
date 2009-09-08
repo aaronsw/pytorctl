@@ -1315,12 +1315,14 @@ class PathBuilder(TorCtl.ConsensusTracker):
     Schedules an immediate job to be run before the next event is
     processed.
     """
+    assert(self.c.is_live())
     self.imm_jobs.put(job)
 
   def schedule_low_prio(self, job):
     """
     Schedules a job to be run when a non-time critical event arrives.
     """
+    assert(self.c.is_live())
     self.low_prio_jobs.put(job)
 
   def reset(self):
@@ -1351,6 +1353,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
     processed. Also notifies the selection manager that it needs
     to update itself.
     """
+    assert(self.c.is_live())
     def notlambda(this):
       job(this.selmgr)
       this.do_reconfigure = True
