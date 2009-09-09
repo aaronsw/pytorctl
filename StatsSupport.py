@@ -192,14 +192,14 @@ class StatsRouter(TorCtl.Router):
   def __init__(self, router): # Promotion constructor :)
     """'Promotion Constructor' that converts a Router directly into a 
     StatsRouter without a copy."""
-    # TODO: Use __metaclass__ and type to do this instead?
+    # TODO: Use __bases__ to do this instead?
     self.__dict__ = router.__dict__
     self.reset()
     # StatsRouters should not be destroyed when Tor forgets about them
     # Give them an extra refcount:
     self.refcount += 1
     plog("DEBUG", "Stats refcount "+str(self.refcount)+" for "+self.idhex)
-  
+
   def reset(self):
     "Reset all stats on this Router"
     self.circ_uncounted = 0

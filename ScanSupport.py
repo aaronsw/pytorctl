@@ -245,4 +245,3 @@ class SQLScanHandler(ScanHandler):
     plog("INFO", "Consensus OK")
 
 
-
