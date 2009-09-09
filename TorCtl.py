@@ -516,6 +516,8 @@ class Connection:
         break
     if self._closeHandler is not None:
       self._closeHandler(ex)
+    # I hate you for making me resort to this, python
+    os.kill(os.getpid(), 15)
     return
 
   def _eventLoop(self):
