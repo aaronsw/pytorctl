@@ -667,8 +667,8 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       rc = self.consensus.routers[idhex]
       if rc.down: continue
       r = Router.query.options(eagerload('bw_history')).filter_by(
-                                  idhex=idhex).one()
-      bwh = BwHistory(router=r, rank=rc.list_rank, bw=rc.bw, 
+                                  idhex=idhex).with_labels().one()
+      bwh = BwHistory(router=r, rank=rc.list_rank, bw=rc.bw,
                       pub_time=r.published)
       r.bw_history.append(bwh)
       #tc_session.add(bwh)
