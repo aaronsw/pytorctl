@@ -288,6 +288,7 @@ class Router:
       self.bw = ns_bandwidth
     else:
       self.bw = bw
+    self.desc_bw = bw
     self.exitpolicy = exitpolicy
     self.flags = flags # Technicaly from NS doc
     self.down = down

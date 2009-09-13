@@ -107,6 +107,7 @@ class BwHistory(Entity):
   using_mapper_options(save_on_init=False)
   router = ManyToOne('Router')
   bw = Field(Integer)
+  desc_bw = Field(Integer)
   rank = Field(Integer)
   pub_time = Field(Time)
 
@@ -211,6 +212,7 @@ class RouterStats(Entity):
   avg_rank = Field(Float)
   max_rank = Field(Integer)
   avg_bw = Field(Float)
+  avg_desc_bw = Field(Float)
 
   percentile = Field(Float)
 
@@ -365,16 +367,19 @@ class RouterStats(Entity):
 
   def _compute_ranks():
     tc_session.clear()
-    min_r = select([func.min(BwHistory.rank)], 
+    min_r = select([func.min(BwHistory.rank)],
         BwHistory.table.c.router_idhex
             == RouterStats.table.c.router_idhex).as_scalar()
-    avg_r = select([func.avg(BwHistory.rank)], 
+    avg_r = select([func.avg(BwHistory.rank)],
         BwHistory.table.c.router_idhex
             == RouterStats.table.c.router_idhex).as_scalar()
-    max_r = select([func.max(BwHistory.rank)], 
+    max_r = select([func.max(BwHistory.rank)],
         BwHistory.table.c.router_idhex
             == RouterStats.table.c.router_idhex).as_scalar()
-    avg_bw = select([func.avg(BwHistory.bw)], 
+    avg_bw = select([func.avg(BwHistory.bw)],
+        BwHistory.table.c.router_idhex
+            == RouterStats.table.c.router_idhex).as_scalar()
+    avg_desc_bw = select([func.avg(BwHistory.desc_bw)],
         BwHistory.table.c.router_idhex
             == RouterStats.table.c.router_idhex).as_scalar()
 
@@ -382,7 +387,8 @@ class RouterStats(Entity):
        {RouterStats.table.c.min_rank:min_r,
         RouterStats.table.c.avg_rank:avg_r,
         RouterStats.table.c.max_rank:max_r,
-        RouterStats.table.c.avg_bw:avg_bw}).execute()
+        RouterStats.table.c.avg_bw:avg_bw,
+        RouterStats.table.c.avg_desc_bw:avg_desc_bw}).execute()
 
     #min_avg_rank = select([func.min(RouterStats.avg_rank)]).as_scalar()
     max_avg_rank = select([func.max(RouterStats.avg_rank)]).as_scalar()
@@ -604,6 +610,7 @@ class RouterStats(Entity):
       f.write("node_id=$"+s.router.idhex+" nick="+s.router.nickname)
       f.write(" strm_bw="+str(cvt(s.sbw,0)))
       f.write(" filt_bw="+str(cvt(s.filt_sbw,0)))
+      f.write(" desc_bw="+str(int(cvt(s.avg_desc_bw,0))))
       f.write(" ns_bw="+str(int(cvt(s.avg_bw,0)))+"\n")
 
     f.flush()
@@ -669,7 +676,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       r = Router.query.options(eagerload('bw_history')).filter_by(
                                   idhex=idhex).with_labels().one()
       bwh = BwHistory(router=r, rank=rc.list_rank, bw=rc.bw,
-                      pub_time=r.published)
+                      desc_bw=rc.desc_bw, pub_time=r.published)
       r.bw_history.append(bwh)
       #tc_session.add(bwh)
       tc_session.add(r)
