@@ -737,7 +737,7 @@ class Connection:
     """
     if not kvlist:
       return
-    msg = " ".join(["%s=%s"%(k,quote(v)) for k,v in kvlist])
+    msg = " ".join(["%s=\"%s\""%(k,quote(v)) for k,v in kvlist])
     self.sendAndRecv("SETCONF %s\r\n"%msg)
 
   def reset_options(self, keylist):
