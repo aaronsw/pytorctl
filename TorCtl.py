@@ -791,7 +791,7 @@ class Connection:
     fp_base64 = sha.sha(desc[:sig_start]).digest().encode("base64")[:-2]
     r = Router.build_from_desc(desc.split("\n"), ns)
     if fp_base64 != ns.orhash:
-      plog("NOTICE", "Router descriptor for "+ns.idhex+" does not match ns fingerprint (NS @ "+str(ns.updated)+" vs Desc @ "+str(r.published)+")")
+      plog("INFO", "Router descriptor for "+ns.idhex+" does not match ns fingerprint (NS @ "+str(ns.updated)+" vs Desc @ "+str(r.published)+")")
       return None
     else:
       return r
