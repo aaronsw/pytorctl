@@ -74,6 +74,9 @@ class ScanHandler(PathSupport.PathBuilder):
     def notlambda(this):
       cond.acquire()
       this.new_nym = True
+      if this.selmgr.bad_restrictions:
+        plog("NOTICE", "Clearing bad restrictions with reconfigure..")
+        this.selmgr.reconfigure(this.current_consensus())
       lines = this.c.sendAndRecv("SIGNAL CLEARDNSCACHE\r\n")
       for _,msg,more in lines:
         plog("DEBUG", msg)
