@@ -27,7 +27,8 @@ __all__ = ["EVENT_TYPE", "TorCtlError", "TorCtlClosed", "ProtocolError",
            "EventHandler", "DebugEventHandler", "NetworkStatusEvent",
            "NewDescEvent", "CircuitEvent", "StreamEvent", "ORConnEvent",
            "StreamBwEvent", "LogEvent", "AddrMapEvent", "BWEvent",
-           "UnknownEvent", "ConsensusTracker", "EventListener", "EVENT_STATE" ]
+           "BuildTimeoutSetEvent", "UnknownEvent", "ConsensusTracker",
+           "EventListener", "EVENT_STATE" ]
 
 import os
 import re
@@ -55,6 +56,8 @@ EVENT_TYPE = Enum2(
           BW="BW",
           NS="NS",
           NEWCONSENSUS="NEWCONSENSUS",
+          BUILDTIMEOUT_SET="BUILDTIMEOUT_SET",
+          GUARD="GUARD",
           NEWDESC="NEWDESC",
           ADDRMAP="ADDRMAP",
           DEBUG="DEBUG",
@@ -125,6 +128,24 @@ class NewDescEvent(Event):
   def __init__(self, event_name, idlist):
     Event.__init__(self, event_name)
     self.idlist = idlist
+
+class GuardEvent(Event):
+  def __init__(self, event_name, ev_type, guard, status):
+    Event.__init__(self, event_name)
+    if "~" in guard:
+      (self.idhex, self.nick) = guard[1:].split("~")
+    elif "=" in guard:
+      (self.idhex, self.nick) = guard[1:].split("=")
+    else:
+      self.idhex = guard[1:]
+    self.status = status
+
+class BuildTimeoutSetEvent(Event):
+  def __init__(self, event_name, set_type, total_times, timeout_ms):
+    Event.__init__(self, event_name)
+    self.set_type = set_type
+    self.total_times = total_times
+    self.timeout_ms = timeout_ms
 
 class CircuitEvent(Event):
   def __init__(self, event_name, circ_id, status, path, purpose,
@@ -890,12 +911,14 @@ class Connection:
       r.append((key,val))
     return r
 
-  def extend_circuit(self, circid, hops):
+  def extend_circuit(self, circid=None, hops=None):
     """Tell Tor to extend the circuit identified by 'circid' through the
        servers named in the list 'hops'.
     """
     if circid is None:
-      circid = "0"
+      circid = 0
+    if hops is None:
+      hops = ""
     plog("DEBUG", "Extending circuit")
     lines = self.sendAndRecv("EXTENDCIRCUIT %d %s\r\n"
                   %(circid, ",".join(hops)))
@@ -968,6 +991,8 @@ class EventSink:
   def msg_event(self, event): pass
   def ns_event(self, event): pass
   def new_consensus_event(self, event): pass
+  def buildtimeout_set_event(self, event): pass
+  def guard_event(self, event): pass
   def address_mapped_event(self, event): pass
   def timer_event(self, event): pass
 
@@ -997,6 +1022,8 @@ class EventListener(EventSink):
       "ADDRMAP" : self.address_mapped_event,
       "NS" : self.ns_event,
       "NEWCONSENSUS" : self.new_consensus_event,
+      "BUILDTIMEOUT_SET" : self.buildtimeout_set_event,
+      "GUARD" : self.guard_event,
       "TORCTL_TIMER" : self.timer_event
       }
     self.parent_handler = None
@@ -1040,6 +1067,8 @@ class EventHandler(EventSink):
       "ADDRMAP" : self.address_mapped_event,
       "NS" : self.ns_event,
       "NEWCONSENSUS" : self.new_consensus_event,
+      "BUILDTIMEOUT_SET" : self.buildtimeout_set_event,
+      "GUARD" : self.guard_event,
       "TORCTL_TIMER" : self.timer_event
       }
     self.c = None # Gets set by Connection.set_event_hanlder()
@@ -1173,6 +1202,15 @@ class EventHandler(EventSink):
       event = NetworkStatusEvent(evtype, parse_ns_body(data))
     elif evtype == "NEWCONSENSUS":
       event = NewConsensusEvent(evtype, parse_ns_body(data))
+    elif evtype == "BUILDTIMEOUT_SET":
+      m = re.match(r"(\S+)\sTOTAL_TIMES=(\d+)\sTIMEOUT_MS=(\d+)", body)
+      set_type, total_times, timeout_ms = m.groups()
+      event = BuildTimeoutSetEvent(evtype, set_type, int(total_times),
+                                   int(timeout_ms))
+    elif evtype == "GUARD":
+      m = re.match(r"(\S+)\s(\S+)\s(\S+)", body)
+      entry, guard, status = m.groups()
+      event = GuardEvent(evtype, entry, guard, status)
     elif evtype == "TORCTL_TIMER":
       event = TimerEvent(evtype, data)
     else:
@@ -1237,6 +1275,12 @@ class EventHandler(EventSink):
     pass
 
   def new_consensus_event(self, event):
+    pass
+
+  def buildtimeout_set_event(self, event):
+    pass
+
+  def guard_event(self, event):
     pass
 
   def address_mapped_event(self, event):
