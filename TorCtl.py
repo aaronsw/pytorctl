@@ -141,11 +141,15 @@ class GuardEvent(Event):
     self.status = status
 
 class BuildTimeoutSetEvent(Event):
-  def __init__(self, event_name, set_type, total_times, timeout_ms):
+  def __init__(self, event_name, set_type, total_times, timeout_ms, xm, alpha,
+               quantile):
     Event.__init__(self, event_name)
     self.set_type = set_type
     self.total_times = total_times
     self.timeout_ms = timeout_ms
+    self.xm = xm
+    self.alpha = alpha
+    self.cutoff_quantile = quantile
 
 class CircuitEvent(Event):
   def __init__(self, event_name, circ_id, status, path, purpose,
@@ -1203,10 +1207,13 @@ class EventHandler(EventSink):
     elif evtype == "NEWCONSENSUS":
       event = NewConsensusEvent(evtype, parse_ns_body(data))
     elif evtype == "BUILDTIMEOUT_SET":
-      m = re.match(r"(\S+)\sTOTAL_TIMES=(\d+)\sTIMEOUT_MS=(\d+)", body)
-      set_type, total_times, timeout_ms = m.groups()
+      m = re.match(
+        r"(\S+)\sTOTAL_TIMES=(\d+)\sTIMEOUT_MS=(\d+)\sXM=(\d+)\sALPHA=(\S+)\sCUTOFF_QUANTILE=(\S+)",
+        body)
+      set_type, total_times, timeout_ms, xm, alpha, quantile = m.groups()
       event = BuildTimeoutSetEvent(evtype, set_type, int(total_times),
-                                   int(timeout_ms))
+                                   int(timeout_ms), int(xm), float(alpha),
+                                   float(quantile))
     elif evtype == "GUARD":
       m = re.match(r"(\S+)\s(\S+)\s(\S+)", body)
       entry, guard, status = m.groups()
