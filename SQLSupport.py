@@ -90,7 +90,9 @@ class Router(Entity):
     self.idhex = router.idhex
     self.orhash = router.orhash
     self.nickname = router.nickname
-    self.os = router.os
+    # XXX: Temporary hack. router.os can contain unicode, which makes
+    # us barf. Apparently 'Text' types can't have unicode chars?
+    # self.os = router.os
     self.rate_limited = router.rate_limited
     self.guard = "Guard" in router.flags
     self.exit = "Exit" in router.flags
@@ -744,7 +746,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       # A lighterweight hack might be to just make the scanners pause
       # on a condition used to signal we are doing this (and other) heavy 
       # lifting. We could have them possibly check self.last_desc_at..
-      if not self.wait_for_signal and e.arrived_at - self.last_desc_at > 30.0:
+      if not self.wait_for_signal and e.arrived_at - self.last_desc_at > 60.0:
         if not PathSupport.PathBuilder.is_urgent_event(e):
           plog("INFO", "Newdesc timer is up. Assuming we have full consensus")
           self._update_rank_history(self.consensus.ns_map.iterkeys())
