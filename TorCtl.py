@@ -968,6 +968,7 @@ class Connection:
 def parse_ns_body(data):
   """Parse the body of an NS event or command into a list of
      NetworkStatus instances"""
+  if not data: return []
   nsgroups = re.compile(r"^r ", re.M).split(data)
   nsgroups.pop(0)
   nslist = []
