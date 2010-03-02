@@ -21,6 +21,7 @@ from TorUtil import meta_port, meta_host, control_port, control_host, control_pa
 from TorCtl import EVENT_TYPE, EVENT_STATE, TorCtlError
 
 import sqlalchemy
+import sqlalchemy.orm.exc
 from sqlalchemy.orm import scoped_session, sessionmaker, eagerload, lazyload, eagerload_all
 from sqlalchemy import create_engine, and_, or_, not_, func
 from sqlalchemy.sql import func,select
@@ -662,10 +663,10 @@ def reset_all():
 class ConsensusTrackerListener(TorCtl.DualEventListener):
   def __init__(self):
     TorCtl.DualEventListener.__init__(self)
-    self.last_desc_at = time.time()-10.0
+    self.last_desc_at = time.time()+60 # Give tor some time to start up
     self.consensus = None
     self.wait_for_signal = False
-  
+
   CONSENSUS_DONE = 0x7fffffff
 
   # TODO: What about non-running routers and uptime information?
@@ -675,16 +676,20 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       if idhex not in self.consensus.routers: continue
       rc = self.consensus.routers[idhex]
       if rc.down: continue
-      r = Router.query.options(eagerload('bw_history')).filter_by(
-                                  idhex=idhex).with_labels().one()
-      bwh = BwHistory(router=r, rank=rc.list_rank, bw=rc.bw,
-                      desc_bw=rc.desc_bw, pub_time=r.published)
-      r.bw_history.append(bwh)
-      #tc_session.add(bwh)
-      tc_session.add(r)
+      try:
+        r = Router.query.options(eagerload('bw_history')).filter_by(
+                                    idhex=idhex).with_labels().one()
+        bwh = BwHistory(router=r, rank=rc.list_rank, bw=rc.bw,
+                        desc_bw=rc.desc_bw, pub_time=r.published)
+        r.bw_history.append(bwh)
+        #tc_session.add(bwh)
+        tc_session.add(r)
+      except sqlalchemy.orm.exc.NoResultFound:
+        plog("WARN", "No descriptor found for consenus router "+str(idhex))
+
     plog("INFO", "Consensus history updated.")
     tc_session.commit()
- 
+
   def _update_db(self, idlist):
     # FIXME: It is tempting to delay this as well, but we need
     # this info to be present immediately for circuit construction...
@@ -693,13 +698,10 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       if idhex in self.consensus.routers:
         rc = self.consensus.routers[idhex]
         r = Router.query.filter_by(idhex=rc.idhex).first()
-        
         if r and r.orhash == rc.orhash:
           # We already have it stored. (Possible spurious NEWDESC)
           continue
-
         if not r: r = Router()
- 
         r.from_router(rc)
         tc_session.add(r)
     plog("INFO", "Consensus db updated")
