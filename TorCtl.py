@@ -1405,8 +1405,8 @@ class ConsensusTracker(EventHandler):
   def new_consensus_event(self, n):
     self._update_consensus(n.nslist)
     self._read_routers(self.ns_map.values())
-    plog("DEBUG", "Read " + str(len(n.nslist))+" NC => " 
-       + str(len(self.sorted_r)) + " routers")
+    plog("DEBUG", str(time.time()-n.arrived_at)+" Read " + str(len(n.nslist))
+       +" NC => " + str(len(self.sorted_r)) + " routers")
  
   def new_desc_event(self, d):
     update = False
@@ -1439,8 +1439,8 @@ class ConsensusTracker(EventHandler):
       self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
       self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
       for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
-    plog("DEBUG", "Read " + str(len(d.idlist))+" ND => " 
-       + str(len(self.sorted_r)) + " routers. Update: "+str(update))
+    plog("DEBUG", str(time.time()-d.arrived_at)+ " Read " + str(len(d.idlist))
+       +" ND => "+str(len(self.sorted_r))+" routers. Update: "+str(update))
     # XXX: Verification only. Can be removed.
     self._sanity_check(self.sorted_r)
     return update

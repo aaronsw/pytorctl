@@ -1589,7 +1589,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
     plog("DEBUG", "Set last exit to "+self.last_exit.idhex)
 
   def circ_status_event(self, c):
-    output = [c.event_name, str(c.circ_id), c.status]
+    output = [str(time.time()-c.arrived_at), c.event_name, str(c.circ_id),
+              c.status]
     if c.path: output.append(",".join(c.path))
     if c.reason: output.append("REASON=" + c.reason)
     if c.remote_reason: output.append("REMOTE_REASON=" + c.remote_reason)
@@ -1634,13 +1635,13 @@ class PathBuilder(TorCtl.ConsensusTracker):
         return
 
   def stream_status_event(self, s):
-    output = [s.event_name, str(s.strm_id), s.status, str(s.circ_id),
+    output = [str(time.time()-s.arrived_at), s.event_name, str(s.strm_id),
+              s.status, str(s.circ_id),
           s.target_host, str(s.target_port)]
     if s.reason: output.append("REASON=" + s.reason)
     if s.remote_reason: output.append("REMOTE_REASON=" + s.remote_reason)
     if s.purpose: output.append("PURPOSE=" + s.purpose)
     if s.source_addr: output.append("SOURCE_ADDR="+s.source_addr)
-    plog("DEBUG", " ".join(output))
     if not re.match(r"\d+.\d+.\d+.\d+", s.target_host):
       s.target_host = "255.255.255.255" # ignore DNS for exit policy check
 
@@ -1653,6 +1654,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
         plog("DEBUG", "Ignoring stream: " + str(s.strm_id))
       return
 
+    plog("DEBUG", " ".join(output))
     # XXX: Copy s.circ_id==0 check+reset from StatsSupport here too?
 
     if s.status == "NEW" or s.status == "NEWRESOLVE":
@@ -1757,12 +1759,15 @@ class PathBuilder(TorCtl.ConsensusTracker):
         self.streams[s.strm_id].port = s.target_port
 
   def stream_bw_event(self, s):
-    output = [s.event_name, str(s.strm_id), str(s.bytes_written),
+    output = [str(time.time()-s.arrived_at), s.event_name, str(s.strm_id),
+              str(s.bytes_written),
               str(s.bytes_read)]
-    plog("DEBUG", " ".join(output))
     if not s.strm_id in self.streams:
+      plog("DEBUG", " ".join(output))
       plog("WARN", "BW event for unknown stream id: "+str(s.strm_id))
     else:
+      if not self.streams[s.strm_id].ignored:
+        plog("DEBUG", " ".join(output))
       self.streams[s.strm_id].bytes_read += s.bytes_read
       self.streams[s.strm_id].bytes_written += s.bytes_written
 
