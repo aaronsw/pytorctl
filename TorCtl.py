@@ -460,6 +460,10 @@ class Connection:
       self._queue.put("CLOSE")
       self._eventQueue.put((time.time(), "CLOSE"))
       self._closed = 1
+      # XXX: For some reason, this does not cause the readline in
+      # self._read_reply() to return immediately. The _loop() thread
+      # thus tends to stick around until some event causes data to come
+      # back...
       self._s.close()
       self._eventThread.join()
     finally:
@@ -483,7 +487,9 @@ class Connection:
       t.setDaemon(daemon)
     t.start()
     self._eventThread = t
-    return self._thread
+    # eventThread provides a more reliable indication of when we are done.
+    # The _loop thread won't always die when self.close() is called.
+    return self._eventThread
 
   def _loop(self):
     """Main subthread loop: Read commands from Tor, and handle them either
