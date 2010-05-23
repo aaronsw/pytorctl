@@ -42,10 +42,15 @@ import socket
 import binascii
 import types
 import time
-import sha
-import sets
 import copy
+
 from TorUtil import *
+
+if sys.version_info < (2, 5):
+  from sets import Set as set
+  from sha import sha as sha1
+else:
+  from hashlib import sha1
 
 # Types of "EVENT" message.
 EVENT_TYPE = Enum2(
@@ -819,7 +824,7 @@ class Connection:
     """Fill in a Router class corresponding to a given NS class"""
     desc = self.sendAndRecv("GETINFO desc/id/" + ns.idhex + "\r\n")[0][2]
     sig_start = desc.find("\nrouter-signature\n")+len("\nrouter-signature\n")
-    fp_base64 = sha.sha(desc[:sig_start]).digest().encode("base64")[:-2]
+    fp_base64 = sha1(desc[:sig_start]).digest().encode("base64")[:-2]
     r = Router.build_from_desc(desc.split("\n"), ns)
     if fp_base64 != ns.orhash:
       plog("INFO", "Router descriptor for "+ns.idhex+" does not match ns fingerprint (NS @ "+str(ns.updated)+" vs Desc @ "+str(r.published)+")")
@@ -1344,8 +1349,8 @@ class ConsensusTracker(EventHandler):
     # 4. They list a bandwidth of 0
     # 5. They have 'opt hibernating' set
     routers = self.c.read_routers(nslist) # Sets .down if 3,4,5
-    old_idhexes = sets.Set(self.routers.keys())
-    new_idhexes = sets.Set(map(lambda r: r.idhex, routers)) 
+    old_idhexes = set(self.routers.keys())
+    new_idhexes = set(map(lambda r: r.idhex, routers)) 
     for r in routers:
       if r.idhex in self.routers:
         if self.routers[r.idhex].nickname != r.nickname:
@@ -1359,8 +1364,8 @@ class ConsensusTracker(EventHandler):
         self.routers[rc.idhex] = rc
 
     removed_idhexes = old_idhexes - new_idhexes
-    removed_idhexes.union_update(sets.Set(map(lambda r: r.idhex,
-                      filter(lambda r: r.down, routers))))
+    removed_idhexes.update(set(map(lambda r: r.idhex,
+                                   filter(lambda r: r.down, routers))))
 
     for i in removed_idhexes:
       if i not in self.routers: continue

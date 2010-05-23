@@ -57,9 +57,12 @@ import Queue
 import time
 import TorUtil
 import traceback
-import sets
 import threading
 from TorUtil import *
+
+import sys
+if sys.version_info < (2, 5):
+  from sets import Set as set
 
 __all__ = ["NodeRestrictionList", "PathRestrictionList",
 "PercentileRestriction", "OSRestriction", "ConserveExitsRestriction",
@@ -1299,7 +1302,7 @@ class SmartSocket(_SocketWrapper):
       import SocksiPy
       socket.socket = __oldsocket
    """
-  port_table = sets.Set()
+  port_table = set()
   _table_lock = threading.Lock()
 
   def connect(self, args):

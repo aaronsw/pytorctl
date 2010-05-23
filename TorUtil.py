@@ -12,10 +12,14 @@ import re
 import sys
 import socket
 import binascii
-import sha
 import math
 import time
 import ConfigParser
+
+if sys.version_info < (2, 5):
+  from sha import sha as sha1
+else:
+  from hashlib import sha1
 
 __all__ = ["Enum", "Enum2", "Callable", "sort_list", "quote", "escape_dots", "unescape_dots",
       "BufSock", "secret_to_key", "urandom_rng", "s2k_gen", "s2k_check", "plog", 
@@ -257,7 +261,7 @@ def secret_to_key(secret, s2k_specifier):
   EXPBIAS = 6
   count = (16+(c&15)) << ((c>>4) + EXPBIAS)
 
-  d = sha.new()
+  d = sha1()
   tmp = s2k_specifier[:8]+secret
   slen = len(tmp)
   while count:
