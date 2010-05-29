@@ -248,7 +248,7 @@ class ExitPolicyLine:
         if re.match(r"\d+.\d+.\d+.\d+", mask):
           self.netmask=struct.unpack(">I", socket.inet_aton(mask))[0]
         else:
-          self.netmask = ~(2**(32 - int(mask)) - 1)
+          self.netmask = 0xffffffff ^ (0xffffffff >> int(mask))
       self.ip = struct.unpack(">I", socket.inet_aton(ip))[0]
     self.ip &= self.netmask
     if port_low == "*":
