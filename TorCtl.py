@@ -231,6 +231,7 @@ class UnknownEvent(Event):
     Event.__init__(self, event_name)
     self.event_string = event_string
 
+ipaddress_re = re.compile(r"(\d{1,3}\.){3}\d{1,3}$")
 class ExitPolicyLine:
   """ Class to represent a line in a Router's exit policy in a way 
       that can be easily checked. """
@@ -245,7 +246,7 @@ class ExitPolicyLine:
         ip = ip_mask
       else:
         ip, mask = ip_mask.split("/")
-        if re.match(r"\d+.\d+.\d+.\d+", mask):
+        if ipaddress_re.match(mask):
           self.netmask=struct.unpack(">I", socket.inet_aton(mask))[0]
         else:
           self.netmask = 0xffffffff ^ (0xffffffff >> int(mask))
