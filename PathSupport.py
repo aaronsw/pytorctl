@@ -1664,6 +1664,12 @@ class PathBuilder(TorCtl.ConsensusTracker):
         s.target_port = self.resolve_port
       if s.circ_id == 0:
         self.streams[s.strm_id] = Stream(s.strm_id, s.target_host, s.target_port, s.status)
+      elif s.strm_id not in self.streams:
+        plog("NOTICE", "Got new stream "+str(s.strm_id)+" with circuit "
+                       +str(s.circ_id)+" already attached.")
+        self.streams[s.strm_id] = Stream(s.strm_id, s.target_host, s.target_port, s.status)
+        self.streams[s.strm_id].circ_id = s.circ_id
+
       # Remember Tor-handled streams (Currently only directory streams)
 
       if s.purpose and s.purpose.find("DIR_") == 0:
