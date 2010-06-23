@@ -802,7 +802,7 @@ class CircuitListener(TorCtl.PreEventListener):
       if self.track_parent:
         for r in self.parent_handler.circuits[c.circ_id].path:
           rq = Router.query.options(eagerload('circuits')).filter_by(
-                                idhex=r.idhex).one()
+                                idhex=r.idhex).with_labels().one()
           circ.routers.append(rq) 
           #rq.circuits.append(circ) # done automagically?
           #tc_session.add(rq)
