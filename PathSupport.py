@@ -228,6 +228,19 @@ class PercentileRestriction(NodeRestriction):
   def __str__(self):
     return self.__class__.__name__+"("+str(self.pct_skip)+","+str(self.pct_fast)+")"
 
+class UptimeRestriction(NodeRestriction):
+  """Restriction to filter out routers with uptimes < min_uptime or
+     > max_uptime"""
+  def __init__(self, min_uptime=None, max_uptime=None):
+    self.min_uptime = min_uptime
+    self.max_uptime = max_uptime
+
+  def r_is_ok(self, r):
+    "Returns true if r is in the uptime boundaries"
+    if self.min_uptime and r.uptime < self.min_uptime: return False
+    if self.max_uptime and r.uptime > self.max_uptime: return False
+    return True
+
 class RankRestriction(NodeRestriction):
   """Restriction to cut out a list-rank slice of the network."""
   def __init__(self, rank_skip, rank_stop):
