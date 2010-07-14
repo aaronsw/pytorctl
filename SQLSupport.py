@@ -63,7 +63,7 @@ class Router(Entity):
   using_mapper_options(save_on_init=False)
   idhex = Field(CHAR(40), primary_key=True, index=True)
   orhash = Field(CHAR(27))
-  published = Field(Time)
+  published = Field(DateTime)
   nickname = Field(Text)
 
   os = Field(Text)
@@ -112,7 +112,7 @@ class BwHistory(Entity):
   bw = Field(Integer)
   desc_bw = Field(Integer)
   rank = Field(Integer)
-  pub_time = Field(Time)
+  pub_time = Field(DateTime)
 
 class Circuit(Entity):
   using_options(shortnames=True, order_by='-launch_time', session=tc_session, metadata=tc_metadata)
