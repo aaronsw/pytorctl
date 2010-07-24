@@ -14,6 +14,7 @@ import socket
 import binascii
 import math
 import time
+import logging
 import ConfigParser
 
 if sys.version_info < (2, 5):
@@ -301,18 +302,55 @@ def s2k_check(secret, k):
 
 ## XXX: Make this a class?
 loglevel = "DEBUG"
-loglevels = {"DEBUG" : 0, "INFO" : 1, "NOTICE" : 2, "WARN" : 3, "ERROR" : 4, "NONE" : 5}
-logfile=None
+#loglevels = {"DEBUG" : 0, "INFO" : 1, "NOTICE" : 2, "WARN" : 3, "ERROR" : 4, "NONE" : 5}
+logfile = None
+logger = None
 
-def plog(level, msg): # XXX: Timestamps
-  if(loglevels[level] >= loglevels[loglevel]):
-    t = time.strftime("%a %b %d %H:%M:%S %Y")
-    if logfile:
-      logfile.write(level+'['+t+']:'+msg+"\n")
-      logfile.flush()
+# Python logging levels are in increments of 10, so place our custom
+# levels in between Python's default levels.
+loglevels = { "DEBUG":  logging.DEBUG,
+              "INFO":   logging.INFO,
+              "NOTICE": logging.INFO + 5,
+              "WARN":   logging.WARN,
+              "ERROR":  logging.ERROR,
+              "NONE":   logging.ERROR + 5 }
+# Set loglevel => name translation.
+for name, value in loglevels.iteritems():
+  logging.addLevelName(value, name)
+
+def plog_use_logger(name):
+  """ Set the Python logger to use with plog() by name.
+      Useful when TorCtl is integrated with an application using logging.
+      The logger specified by name must be set up before the first call
+      to plog()! """
+  global logger, loglevels
+  logger = logging.getLogger(name)
+
+def plog(level, msg, *args):
+  global logger, logfile
+  if not logger:
+    # Default init = old TorCtl format + default behavior
+    # Default behavior = log to stdout if TorUtil.logfile is None,
+    # or to the open file specified otherwise.
+    logger = logging.getLogger("TorCtl")
+    formatter = logging.Formatter("%(levelname)s[%(asctime)s]:%(message)s",
+                                  "%a %b %d %H:%M:%S %Y")
+
+    if not logfile:
+      logfile = sys.stdout
+    # HACK: if logfile is a string, assume is it the desired filename.
+    if type(logfile) is str:
+      f = logging.FileHandler(logfile)
+      f.setFormatter(formatter)
+      logger.addHandler(f)
+    # otherwise, pretend it is a stream.
     else:
-      print level, '[', t, ']:', msg
-      sys.stdout.flush()
+      ch = logging.StreamHandler(logfile)
+      ch.setFormatter(formatter)
+      logger.addHandler(ch)
+    logger.setLevel(loglevels[loglevel])
+
+  logger.log(loglevels[level], msg, *args)
 
 # Stolen from
 # http://www.nmr.mgh.harvard.edu/Neural_Systems_Group/gary/python/stats.py
