@@ -843,15 +843,13 @@ class Connection:
     for ns in nslist:
       try:
         r = self.get_router(ns)
-        if r: new.append(r)
+        if r:
+          new.append(r)
       except ErrorReply:
         bad_key += 1
         if "Running" in ns.flags:
           plog("NOTICE", "Running router "+ns.nickname+"="
              +ns.idhex+" has no descriptor")
-      except:
-        traceback.print_exception(*sys.exc_info())
-        continue
   
     return new
 
