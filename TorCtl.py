@@ -93,7 +93,12 @@ class ProtocolError(TorCtlError):
 
 class ErrorReply(TorCtlError):
   "Raised when Tor controller returns an error"
-  pass
+  def __init__(self, *args, **kwargs):
+    if "status" in kwargs:
+      self.status = kwargs.pop("status")
+    if "message" in kwargs:
+      self.message = kwargs.pop("message")
+    TorCtlError.__init__(self, *args, **kwargs)
 
 class NetworkStatus:
   "Filled in during NS events"
@@ -716,10 +721,12 @@ class Connection:
     assert msg.endswith("\r\n")
 
     lines = self._sendImpl(self._doSend, msg)
+
     # print lines
     for tp, msg, _ in lines:
       if tp[0] in '45':
-        raise ErrorReply("%s %s"%(tp, msg))
+        code = int(tp[:3])
+        raise ErrorReply("%s %s"%(tp, msg), status = code, message = msg)
       if tp not in expectedTypes:
         raise ProtocolError("Unexpectd message type %r"%tp)
 
