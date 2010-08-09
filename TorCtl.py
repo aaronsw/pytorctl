@@ -305,6 +305,24 @@ class RouterVersion:
   def __ne__(self, other): return self.version != other.version
   def __str__(self): return self.ver_string
 
+
+# map descriptor keywords to regular expressions.
+desc_re = {
+  "router":          r"(\S+) (\S+)",
+  "opt fingerprint": r"(.+).*on (\S+)",
+  "opt hibernating": r"1$",
+  "platform":  r"Tor (\S+).*on ([\S\s]+)",
+  "accept":    r"(\S+):([^-]+)(?:-(\d+))?",
+  "reject":    r"(\S+):([^-]+)(?:-(\d+))?",
+  "bandwidth": r"(\d+) \d+ (\d+)",
+  "uptime":    r"(\d+)",
+  "contact":   r"(.+)",
+  "published": r"(\S+ \S+)",
+}
+# Compile each regular expression now.
+for kw, reg in desc_re.iteritems():
+  desc_re[kw] = re.compile(reg)
+
 class Router:
   """ 
   Class to represent a router from a descriptor. Can either be
@@ -323,7 +341,7 @@ class Router:
     if ns_bandwidth != None:
       self.bw = ns_bandwidth
     else:
-      self.bw = bw
+     self.bw = bw
     self.desc_bw = bw
     self.exitpolicy = exitpolicy
     self.flags = flags # Technicaly from NS doc
@@ -353,9 +371,6 @@ class Router:
     the flags, the nickname, and the idhex string). 
     Returns a Router instance.
     """
-    # XXX: Compile these regular expressions? This is an expensive process
-    # Use http://docs.python.org/lib/profile.html to verify this is 
-    # the part of startup that is slow
     exitpolicy = []
     dead = not ("Running" in ns.flags)
     bw_observed = 0
@@ -368,40 +383,57 @@ class Router:
     contact = None
 
     for line in desc:
-      rt = re.search(r"^router (\S+) (\S+)", line)
-      fp = re.search(r"^opt fingerprint (.+).*on (\S+)", line)
-      pl = re.search(r"^platform Tor (\S+).*on ([\S\s]+)", line)
-      ac = re.search(r"^accept (\S+):([^-]+)(?:-(\d+))?", line)
-      rj = re.search(r"^reject (\S+):([^-]+)(?:-(\d+))?", line)
-      bw = re.search(r"^bandwidth (\d+) \d+ (\d+)", line)
-      up = re.search(r"^uptime (\d+)", line)
-      ct = re.search(r"^contact (.+)", line)
-      pb = re.search(r"^published (\S+ \S+)", line)
-      if re.search(r"^opt hibernating 1", line):
-        dead = True 
-        if ("Running" in ns.flags):
-          plog("INFO", "Hibernating router "+ns.nickname+" is running, flags: "+" ".join(ns.flags))
-      if ac:
-        exitpolicy.append(ExitPolicyLine(True, *ac.groups()))
-      elif rj:
-        exitpolicy.append(ExitPolicyLine(False, *rj.groups()))
-      elif bw:
-        bws = map(int, bw.groups())
+      # Pull off the keyword...
+      kw, _, rest = line.partition(" ")
+
+      # ...and if it's "opt", extend it by the next keyword
+      # so we get "opt hibernating" as one keyword.
+      if kw == "opt":
+        okw, _, rest = rest.partition(" ")
+        kw += " " + okw
+
+      # try to match the descriptor line by keyword.
+      try:
+        match = desc_re[kw].match(rest)
+      # if we don't handle this keyword, just move on to the next one.
+      except KeyError:
+        continue
+      # if we do handle this keyword but its data is malformed,
+      # move on to the next one without processing it.
+      if not match:
+        continue
+
+      g = match.groups()
+
+      # Handle each keyword individually.
+      # TODO: This could possibly be sped up since we technically already
+      # did the compare with the dictionary lookup... lambda magic time.
+      if kw == "accept":
+        exitpolicy.append(ExitPolicyLine(True, *g))
+      elif kw == "reject":
+        exitpolicy.append(ExitPolicyLine(False, *g))
+      elif kw == "router":
+        router,ip = g
+      elif kw == "bandwidth":
+        bws = map(int, g)
         bw_observed = min(bws)
         rate_limited = False
         if bws[0] < bws[1]:
           rate_limited = True
-      elif pl:
-        version, os = pl.groups()
-      elif up:
-        uptime = int(up.group(1))
-      elif rt:
-        router,ip = rt.groups()
-      elif pb:
-        t = time.strptime(pb.group(1)+" UTC", "20%y-%m-%d %H:%M:%S %Z")
+      elif kw == "platform":
+        version, os = g
+      elif kw == "uptime":
+        uptime = int(g[0])
+      elif kw == "published":
+        t = time.strptime(g[0] + " UTC", "20%y-%m-%d %H:%M:%S %Z")
         published = datetime.datetime(*t[0:6])
-      elif ct:
-        contact = ct.group(1)
+      elif kw == "contact":
+        contact = g[0]
+      elif kw == "opt hibernating":
+        dead = True 
+        if ("Running" in ns.flags):
+          plog("INFO", "Hibernating router "+ns.nickname+" is running, flags: "+" ".join(ns.flags))
+
     if router != ns.nickname:
       plog("NOTICE", "Got different names " + ns.nickname + " vs " +
              router + " for " + ns.idhex)
