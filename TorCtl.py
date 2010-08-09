@@ -290,7 +290,7 @@ class RouterVersion:
       to check for newer, older, or equivalent versions. """
   def __init__(self, version):
     if version:
-      v = re.search("^(\d+).(\d+).(\d+).(\d+)", version).groups()
+      v = re.search("^(\d+)\.(\d+)\.(\d+)\.(\d+)", version).groups()
       self.version = int(v[0])*0x1000000 + int(v[1])*0x10000 + int(v[2])*0x100 + int(v[3])
       self.ver_string = version
     else: 
