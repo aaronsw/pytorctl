@@ -1400,8 +1400,8 @@ class ConsensusTracker(EventHandler):
     if len(self.routers) > 1.5*self.consensus_count:
       plog("WARN", "Router count of "+str(len(self.routers))+" exceeds consensus count "+str(self.consensus_count)+" by more than 50%")
 
-    if len(self.ns_map) > self.consensus_count:
-      plog("WARN", "NS map count of "+str(len(self.ns_map))+" exceeds consensus count "+str(self.consensus_count))
+    if len(self.ns_map) < self.consensus_count:
+      plog("WARN", "NS map count of "+str(len(self.ns_map))+" is below consensus count "+str(self.consensus_count))
 
     downed =  filter(lambda r: r.down, list)
     for d in downed:

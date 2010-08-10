@@ -157,7 +157,7 @@ class NodeGenerator:
   def rebuild(self, sorted_r=None):
     """ Extra step to be performed when new routers are added or when
     the restrictions change. """
-    if sorted_r:
+    if sorted_r != None:
       self.sorted_r = sorted_r
     self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
     if not self.rstr_routers:
