@@ -1321,11 +1321,12 @@ class Consensus:
   of subsequent updates, use copy.deepcopy()
   """
 
-  def __init__(self, ns_map, sorted_r, router_map, nick_map):
+  def __init__(self, ns_map, sorted_r, router_map, nick_map, consensus_count):
     self.ns_map = ns_map
     self.sorted_r = sorted_r
     self.routers = router_map
     self.name_to_key = nick_map
+    self.consensus_count = consensus_count
 
 class ConsensusTracker(EventHandler):
   """
@@ -1340,8 +1341,11 @@ class ConsensusTracker(EventHandler):
     self.sorted_r = []
     self.name_to_key = {}
     self.RouterClass = RouterClass
+    self.consensus_count = 0
     self.update_consensus()
 
+  # XXX: If there were a potential memory leak through perpetually referenced
+  # objects, this function would be the #1 suspect.
   def _read_routers(self, nslist):
     # Routers can fall out of our consensus five different ways:
     # 1. Their descriptors disappear
@@ -1350,6 +1354,7 @@ class ConsensusTracker(EventHandler):
     # 4. They list a bandwidth of 0
     # 5. They have 'opt hibernating' set
     routers = self.c.read_routers(nslist) # Sets .down if 3,4,5
+    self.consensus_count = len(routers)
     old_idhexes = set(self.routers.keys())
     new_idhexes = set(map(lambda r: r.idhex, routers)) 
     for r in routers:
@@ -1392,6 +1397,12 @@ class ConsensusTracker(EventHandler):
     self._sanity_check(self.sorted_r)
 
   def _sanity_check(self, list):
+    if len(self.routers) > 1.5*self.consensus_count:
+      plog("WARN", "Router count of "+str(len(self.routers))+" exceeds consensus count "+str(len(self.consensus_count))+" by more than 50%")
+
+    if len(self.ns_map) > self.consensus_count:
+      plog("WARN", "NS map count of "+str(len(self.ns_map))+" exceeds consensus count "+str(len(self.consensus_count)))
+
     downed =  filter(lambda r: r.down, list)
     for d in downed:
       plog("WARN", "Router "+d.idhex+" still present but is down. Del: "+str(d.deleted)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
@@ -1435,8 +1446,14 @@ class ConsensusTracker(EventHandler):
         continue
       elif len(r) != 1:
         plog("WARN", "Multiple descs for "+i+" after NEWDESC")
+
       r = r[0]
       ns = ns[0]
+      if ns.idhex in self.routers and self.routers[ns.idhex].orhash == r.orhash:
+        plog("NOTICE",
+             "Got extra NEWDESC event for router "+ns.nickname+"="+ns.idhex)
+      else:
+        self.consensus_count += 1
       self.name_to_key[ns.nickname] = "$"+ns.idhex
       if r and r.idhex in self.ns_map:
         if ns.orhash != self.ns_map[r.idhex].orhash:
@@ -1459,7 +1476,7 @@ class ConsensusTracker(EventHandler):
 
   def current_consensus(self):
     return Consensus(self.ns_map, self.sorted_r, self.routers, 
-                     self.name_to_key)
+                     self.name_to_key, self.consensus_count)
 
 class DebugEventHandler(EventHandler):
   """Trivial debug event handler: reassembles all parsed events to stdout."""

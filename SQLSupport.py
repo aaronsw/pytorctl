@@ -749,7 +749,11 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
       # on a condition used to signal we are doing this (and other) heavy 
       # lifting. We could have them possibly check self.last_desc_at..
       if not self.wait_for_signal and e.arrived_at - self.last_desc_at > 60.0:
-        if not PathSupport.PathBuilder.is_urgent_event(e):
+        if self.consensus.consensus_count  < 0.95*(len(self.consensus.ns_map)):
+          plog("INFO", "Not enough router descriptors: "
+                       +str(self.consensus.consensus_count)+"/"
+                       +str(len(self.consensus.ns_map)))
+        elif not PathSupport.PathBuilder.is_urgent_event(e):
           plog("INFO", "Newdesc timer is up. Assuming we have full consensus")
           self._update_rank_history(self.consensus.ns_map.iterkeys())
           self.last_desc_at = ConsensusTrackerListener.CONSENSUS_DONE
