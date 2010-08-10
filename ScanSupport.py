@@ -241,6 +241,7 @@ class SQLScanHandler(ScanHandler):
         this.sql_consensus_listener.wait_for_signal = True
         cond.notify()
         cond.release()
+    plog("DEBUG", "Checking for consensus")
     cond.acquire()
     self.schedule_low_prio(notlambda)
     cond.wait()
