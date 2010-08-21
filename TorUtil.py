@@ -352,8 +352,23 @@ def plog(level, msg, *args):
 
   logger.log(loglevels[level], msg, *args)
 
-# Stolen from
+# The following zprob routine was stolen from
 # http://www.nmr.mgh.harvard.edu/Neural_Systems_Group/gary/python/stats.py
+# pursuant to this license:
+#
+# Copyright (c) 1999-2007 Gary Strangman; All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# The above license applies only to the following 39 lines of code.
 def zprob(z):
     """
 Returns the area under the normal curve 'to the left of' the given z value.
