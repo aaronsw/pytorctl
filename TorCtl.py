@@ -384,13 +384,16 @@ class Router:
 
     for line in desc:
       # Pull off the keyword...
-      kw, _, rest = line.partition(" ")
+      sp = line.split(" ", 1)
+      kw = sp[0]
+      rest = sp[1] if len(sp) > 1 else ""
 
       # ...and if it's "opt", extend it by the next keyword
       # so we get "opt hibernating" as one keyword.
       if kw == "opt":
-        okw, _, rest = rest.partition(" ")
-        kw += " " + okw
+        sp = rest.split(" ", 1)
+        rest = sp[1] if len(sp) > 1 else ""
+        kw += " " + sp[0]
 
       # try to match the descriptor line by keyword.
       try:
