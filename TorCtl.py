@@ -323,6 +323,17 @@ desc_re = {
 for kw, reg in desc_re.iteritems():
   desc_re[kw] = re.compile(reg)
 
+def partition(string, delimiter):
+  """ Implementation of string.partition-like function for Python <
+  2.5.  Returns a tuple (first, rest), where first is the text up to
+  the first delimiter, and rest is the text after the first delimiter.
+  """
+  sp = string.split(delimiter, 1)
+  if len(sp) > 1:
+    return sp[0], sp[1]
+  else:
+    return sp[0], ""
+
 class Router:
   """ 
   Class to represent a router from a descriptor. Can either be
@@ -384,16 +395,13 @@ class Router:
 
     for line in desc:
       # Pull off the keyword...
-      sp = line.split(" ", 1)
-      kw = sp[0]
-      rest = sp[1] if len(sp) > 1 else ""
+      kw, rest = partition(line, " ")
 
       # ...and if it's "opt", extend it by the next keyword
       # so we get "opt hibernating" as one keyword.
       if kw == "opt":
-        sp = rest.split(" ", 1)
-        rest = sp[1] if len(sp) > 1 else ""
-        kw += " " + sp[0]
+        okw, rest = partition(rest, " ")
+        kw += " " + okw
 
       # try to match the descriptor line by keyword.
       try:
