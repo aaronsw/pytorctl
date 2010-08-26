@@ -18,12 +18,19 @@ custom event handlers that you may extend off of those).
 
 This package also contains a helper class for representing Routers, and
 classes and constants for each event.
+ 
+To quickly fetch a TorCtl instance to experiment with use the following:
+
+>>> import TorCtl
+>>> conn = TorCtl.connect()
+>>> conn.get_info("version")["version"]
+'0.2.1.24'
 
 """
 
-__all__ = ["EVENT_TYPE", "TorCtlError", "TorCtlClosed", "ProtocolError",
-           "ErrorReply", "NetworkStatus", "ExitPolicyLine", "Router",
-           "RouterVersion", "Connection", "parse_ns_body",
+__all__ = ["EVENT_TYPE", "connect", "TorCtlError", "TorCtlClosed",
+           "ProtocolError", "ErrorReply", "NetworkStatus", "ExitPolicyLine",
+           "Router", "RouterVersion", "Connection", "parse_ns_body",
            "EventHandler", "DebugEventHandler", "NetworkStatusEvent",
            "NewDescEvent", "CircuitEvent", "StreamEvent", "ORConnEvent",
            "StreamBwEvent", "LogEvent", "AddrMapEvent", "BWEvent",
@@ -39,6 +46,7 @@ import Queue
 import datetime
 import traceback
 import socket
+import getpass
 import binascii
 import types
 import time
@@ -78,6 +86,62 @@ EVENT_STATE = Enum2(
           HANDLING="HANDLING",
           POSTLISTEN="POSTLISTEN",
           DONE="DONE")
+
+# Types of control port authentication
+AUTH_TYPE = Enum2(
+          NONE="NONE",
+          PASSWORD="PASSWORD",
+          COOKIE="COOKIE")
+
+INCORRECT_PASSWORD_MSG = "Provided passphrase was incorrect"
+
+def connect(controlAddr="127.0.0.1", controlPort=9051, passphrase=None):
+  """
+  Convenience function for quickly getting a TorCtl connection. This is very
+  handy for debugging or CLI setup, handling setup and prompting for a password
+  if necessary (if either none is provided as input or it fails). If any issues
+  arise this prints a description of the problem and returns None.
+  
+  Arguments:
+    controlAddr - ip address belonging to the controller
+    controlPort - port belonging to the controller
+    passphrase  - authentication passphrase (if defined this is used rather
+                  than prompting the user)
+  """
+  
+  try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((controlAddr, controlPort))
+    conn = Connection(s)
+    authType, authValue = conn.get_auth_type(), ""
+    
+    if authType == AUTH_TYPE.PASSWORD:
+      # password authentication, promting for the password if it wasn't provided
+      if passphrase: authValue = passphrase
+      else:
+        try: authValue = getpass.getpass()
+        except KeyboardInterrupt: return None
+    elif authType == AUTH_TYPE.COOKIE:
+      authValue = conn.get_auth_cookie_path()
+    
+    conn.authenticate(authValue)
+    return conn
+  except socket.error, exc:
+    if "Connection refused" in exc.args:
+      # most common case - tor control port isn't available
+      print "Connection refused. Is the ControlPort enabled?"
+    else: print "Failed to establish socket: %s" % exc
+    
+    return None
+  except Exception, exc:
+    if passphrase and str(exc) == "Unable to authenticate: password incorrect":
+      # provide a warning that the provided password didn't work, then try
+      # again prompting for the user to enter it
+      print INCORRECT_PASSWORD_MSG
+      return connect(controlAddr, controlPort)
+    else:
+      print exc
+      return None
 
 class TorCtlError(Exception):
   "Generic error raised by TorControl code."
@@ -498,7 +562,64 @@ class Connection:
     self._eventQueue = Queue.Queue()
     self._s = BufSock(sock)
     self._debugFile = None
+    
+    # authentication information (lazily fetched so None if still unknown)
+    self._authType = None
+    self._cookiePath = None
 
+  def get_auth_type(self):
+    """
+    Provides the authentication type used for the control port (a member of
+    the AUTH_TYPE enumeration). This raises an IOError if this fails to query
+    the PROTOCOLINFO.
+    """
+    
+    if self._authType: return self._authType
+    else:
+      # check PROTOCOLINFO for authentication type
+      try:
+        authInfo = self.sendAndRecv("PROTOCOLINFO\r\n")[1][1]
+      except ErrorReply, exc:
+        raise IOError("Unable to query PROTOCOLINFO for the authentication type: %s" % exc)
+      
+      authType, cookiePath = None, None
+      if authInfo.startswith("AUTH METHODS=NULL"):
+        # no authentication required
+        authType = AUTH_TYPE.NONE
+      elif authInfo.startswith("AUTH METHODS=HASHEDPASSWORD"):
+        # password authentication
+        authType = AUTH_TYPE.PASSWORD
+      elif authInfo.startswith("AUTH METHODS=COOKIE"):
+        # cookie authentication, parses authentication cookie path
+        authType = AUTH_TYPE.COOKIE
+        
+        start = authInfo.find("COOKIEFILE=\"") + 12
+        end = authInfo.find("\"", start)
+        cookiePath = authInfo[start:end]
+      else:
+        # not of a recognized authentication type (new addition to the
+        # control-spec?)
+        raise IOError("Unrecognized authentication type: %s" % authInfo)
+      
+      self._authType = authType
+      self._cookiePath = cookiePath
+      return self._authType
+  
+  def get_auth_cookie_path(self):
+    """
+    Provides the path of tor's authentication cookie. If the connection isn't
+    using cookie authentication then this provides None. This raises an IOError
+    if PROTOCOLINFO can't be queried.
+    """
+    
+    # fetches authentication type and cookie path if still unloaded
+    if self._authType == None: self.get_auth_type()
+    
+    if self._authType == AUTH_TYPE.COOKIE:
+      return self._cookiePath
+    else:
+      return None
+  
   def set_close_handler(self, handler):
     """Call 'handler' when the Tor process has closed its connection or
        given us an exception.  If we close normally, no arguments are
@@ -776,6 +897,61 @@ class Connection:
     return lines
 
   def authenticate(self, secret=""):
+    """
+    Authenticates to the control port. If an issue arises this raises either of
+    the following:
+      - IOError for failures in reading an authentication cookie or querying
+        PROTOCOLINFO.
+      - TorCtl.ErrorReply for authentication failures or if the secret is
+        undefined when using password authentication
+    """
+    
+    # fetches authentication type and cookie path if still unloaded
+    if self._authType == None: self.get_auth_type()
+    
+    # validates input
+    if self._authType == AUTH_TYPE.PASSWORD and secret == "":
+      raise ErrorReply("Unable to authenticate: no passphrase provided")
+    
+    authCookie = None
+    try:
+      if self._authType == AUTH_TYPE.NONE:
+        self.authenticate_password("")
+      elif self._authType == AUTH_TYPE.PASSWORD:
+        self.authenticate_password(secret)
+      else:
+        authCookie = open(self._cookiePath, "r")
+        self.authenticate_cookie(authCookie)
+        authCookie.close()
+    except ErrorReply, exc:
+      if authCookie: authCookie.close()
+      issue = str(exc)
+      
+      # simplifies message if the wrong credentials were provided (common
+      # mistake)
+      if issue.startswith("515 Authentication failed: "):
+        if issue[27:].startswith("Password did not match"):
+          issue = "password incorrect"
+        elif issue[27:] == "Wrong length on authentication cookie.":
+          issue = "cookie value incorrect"
+      
+      raise ErrorReply("Unable to authenticate: %s" % issue)
+    except IOError, exc:
+      if authCookie: authCookie.close()
+      issue = None
+      
+      # cleaner message for common errors
+      if str(exc).startswith("[Errno 13] Permission denied"):
+        issue = "permission denied"
+      elif str(exc).startswith("[Errno 2] No such file or directory"):
+        issue = "file doesn't exist"
+      
+      # if problem's recognized give concise message, otherwise print exception
+      # string
+      if issue: raise IOError("Failed to read authentication cookie (%s): %s" % (issue, self._cookiePath))
+      else: raise IOError("Failed to read authentication cookie: %s" % exc)
+  
+  def authenticate_password(self, secret=""):
     """Sends an authenticating secret (password) to Tor.  You'll need to call 
        this method (or authenticate_cookie) before Tor can start.
     """
