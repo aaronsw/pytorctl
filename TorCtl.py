@@ -811,6 +811,10 @@ class Connection:
       self.set_event_handler(EventHandler())
     self._handler.add_event_listener(listener)
 
+  def block_until_close(self):
+    """ Blocks until the connection to the Tor process is interrupted"""
+    return self._eventThread.join()
+
   def _read_reply(self):
     lines = []
     while 1:
@@ -1011,6 +1015,11 @@ class Connection:
        That no longer works.
     """
     self.sendAndRecv("RESETCONF %s\r\n"%(" ".join(keylist)))
+
+  def get_consensus(self):
+    """Get the pristine Tor Consensus. Returns a list of
+       TorCtl.NetworkStatus instances."""
+    return parse_ns_body(self.sendAndRecv("GETINFO dir/status-vote/current/consensus\r\n")[0][2])
 
   def get_network_status(self, who="all"):
     """Get the entire network status list. Returns a list of
@@ -1556,8 +1565,15 @@ class ConsensusTracker(EventHandler):
   """
   A ConsensusTracker is an EventHandler that tracks the current
   consensus of Tor in self.ns_map, self.routers and self.sorted_r
+
+  Users must subscribe to "NEWCONSENSUS" and "NEWDESC" events.
+
+  If you also wish to track the Tor client's opinion on the Running flag
+  based on reachability tests, you must subscribe to "NS" events,
+  and you should set the constructor parameter "consensus_only" to
+  False.
   """
-  def __init__(self, c, RouterClass=Router):
+  def __init__(self, c, RouterClass=Router, consensus_only=True):
     EventHandler.__init__(self)
     c.set_event_handler(self)
     self.ns_map = {}
@@ -1566,6 +1582,7 @@ class ConsensusTracker(EventHandler):
     self.name_to_key = {}
     self.RouterClass = RouterClass
     self.consensus_count = 0
+    self.consensus_only = consensus_only
     self.update_consensus()
 
   # XXX: If there were a potential memory leak through perpetually referenced
@@ -1646,7 +1663,10 @@ class ConsensusTracker(EventHandler):
       self.name_to_key[n.nickname] = "$"+n.idhex
    
   def update_consensus(self):
-    self._update_consensus(self.c.get_network_status())
+    if self.consensus_only:
+      self._update_consensus(self.c.get_consensus())
+    else:
+      self._update_consensus(self.c.get_network_status())
     self._read_routers(self.ns_map.values())
 
   def new_consensus_event(self, n):
@@ -1660,7 +1680,11 @@ class ConsensusTracker(EventHandler):
     for i in d.idlist:
       r = None
       try:
-        ns = self.c.get_network_status("id/"+i)
+        if i in self.ns_map:
+          ns = (self.ns_map[i],)
+        else:
+          plog("WARN", "Need to getinfo ns/id for router desc: "+i)
+          ns = self.c.get_network_status("id/"+i)
         r = self.c.read_routers(ns)
       except ErrorReply, e:
         plog("WARN", "Error reply for "+i+" after NEWDESC: "+str(e))
@@ -1697,6 +1721,31 @@ class ConsensusTracker(EventHandler):
     # XXX: Verification only. Can be removed.
     self._sanity_check(self.sorted_r)
     return update
+
+  def ns_event(self, ev):
+    update = False
+    for ns in ev.nslist:
+      # Check current consensus.. If present, check flags
+      if ns.idhex in self.ns_map and ns.idhex in self.routers and \
+         ns.orhash == self.ns_map[ns.idhex].orhash:
+        if "Running" in ns.flags and \
+           "Running" not in self.ns_map[ns.idhex].flags:
+          plog("INFO", "Router "+ns.nickname+"="+ns.idhex+" is now up.")
+          update = True
+          self.routers[ns.idhex].flags = ns.flags
+          self.routers[ns.idhex].down = False
+
+        if "Running" not in ns.flags and \
+           "Running" in self.ns_map[ns.idhex].flags:
+          plog("INFO", "Router "+ns.nickname+"="+ns.idhex+" is now down.")
+          update = True
+          self.routers[ns.idhex].flags = ns.flags
+          self.routers[ns.idhex].down = True
+    if update:
+      self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
+      self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
+      for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
+    self._sanity_check(self.sorted_r)
 
   def current_consensus(self):
     return Consensus(self.ns_map, self.sorted_r, self.routers, 
