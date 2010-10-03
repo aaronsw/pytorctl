@@ -1,11 +1,13 @@
 import PathSupport
-import SQLSupport
 import threading
 import copy
 import time
 import shutil
+import TorCtl
 
 from TorUtil import plog
+
+SQLSupport = None
 
 # Note: be careful writing functions for this class. Remember that
 # the PathBuilder has its own thread that it recieves events on
@@ -169,6 +171,14 @@ class ScanHandler(PathSupport.PathBuilder):
     cond.release()
 
 class SQLScanHandler(ScanHandler):
+  def __init__(self, c, selmgr, RouterClass=TorCtl.Router,
+               strm_selector=PathSupport.StreamSelector):
+    # Only require sqlalchemy if we really need it.
+    global SQLSupport
+    if SQLSupport is None:
+      import SQLSupport
+    ScanHandler.__init__(self, c, selmgr, RouterClass, strm_selector)
+
   def attach_sql_listener(self, db_uri):
     plog("DEBUG", "Got sqlite: "+db_uri)
     SQLSupport.setup_db(db_uri, echo=False, drop=True)
