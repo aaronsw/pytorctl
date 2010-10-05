@@ -527,11 +527,9 @@ class Router:
     'new' """
     if self.idhex != new.idhex:
       plog("ERROR", "Update of router "+self.nickname+"changes idhex!")
-    plog("DEBUG", "Updating refcount "+str(self.refcount)+" for "+self.idhex)
     for i in new.__dict__.iterkeys():
       if i == "refcount" or i == "_generated": continue
       self.__dict__[i] = new.__dict__[i]
-    plog("DEBUG", "Updated refcount "+str(self.refcount)+" for "+self.idhex)
 
   def will_exit_to(self, ip, port):
     """ Check the entire exitpolicy to see if the router will allow
