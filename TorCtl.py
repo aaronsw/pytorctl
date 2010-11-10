@@ -510,7 +510,7 @@ class Router:
           plog("INFO", "Hibernating router "+ns.nickname+" is running, flags: "+" ".join(ns.flags))
 
     if router != ns.nickname:
-      plog("NOTICE", "Got different names " + ns.nickname + " vs " +
+      plog("INFO", "Got different names " + ns.nickname + " vs " +
              router + " for " + ns.idhex)
     if not bw_observed and not dead and ("Valid" in ns.flags):
       plog("INFO", "No bandwidth for live router "+ns.nickname+", flags: "+" ".join(ns.flags))
