@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # TorCtl.py -- Python module to interface with Tor Control interface.
-# Copyright 2007 Mike Perry -- See LICENSE for licensing information.
-# Portions Copyright 2005 Nick Matthewson
+# Copyright 2007-2010 Mike Perry -- See LICENSE for licensing information.
+# Portions Copyright 2005 Nick Mathewson
 
 """
 TorUtil -- Support functions for TorCtl.py and metatroller

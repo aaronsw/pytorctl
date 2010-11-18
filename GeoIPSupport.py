@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# Copyright 2007 Johannes Renner and Mike Perry. See LICENSE file.
 
 import struct
 import socket

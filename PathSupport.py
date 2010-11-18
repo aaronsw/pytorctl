@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# Copyright 2007-2010 Mike Perry. See LICENSE file.
 """
 
 Support classes for path construction

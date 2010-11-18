@@ -1,3 +1,5 @@
+#!/usr/bin/python
+# Copyright 2009-2010 Mike Perry. See LICENSE file.
 import PathSupport
 import threading
 import copy
