@@ -374,6 +374,7 @@ class RouterVersion:
 desc_re = {
   "router":          r"(\S+) (\S+)",
   "opt fingerprint": r"(.+).*on (\S+)",
+  "opt extra-info-digest": r"(\S+)",
   "opt hibernating": r"1$",
   "platform":  r"Tor (\S+).*on ([\S\s]+)",
   "accept":    r"(\S+):([^-]+)(?:-(\d+))?",
@@ -410,7 +411,9 @@ class Router:
         self.__dict__[i] =  copy.deepcopy(args[0].__dict__[i])
       return
     else:
-      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime, published, contact, rate_limited, orhash, ns_bandwidth) = args
+      (idhex, name, bw, down, exitpolicy, flags, ip, version, os, uptime,
+       published, contact, rate_limited, orhash,
+       ns_bandwidth,extra_info_digest) = args
     self.idhex = idhex
     self.nickname = name
     if ns_bandwidth != None:
@@ -432,6 +435,7 @@ class Router:
     self.contact = contact
     self.rate_limited = rate_limited
     self.orhash = orhash
+    self.extra_info_digest = extra_info_digest
     self._generated = [] # For ExactUniformGenerator
 
   def __str__(self):
@@ -456,6 +460,7 @@ class Router:
     router = "[none]"
     published = "never"
     contact = None
+    extra_info_digest = None
 
     for line in desc:
       # Pull off the keyword...
@@ -504,6 +509,8 @@ class Router:
         published = datetime.datetime(*t[0:6])
       elif kw == "contact":
         contact = g[0]
+      elif kw == "opt extra-info-digest":
+        extra_info_digest = g[0]
       elif kw == "opt hibernating":
         dead = True 
         if ("Running" in ns.flags):
@@ -519,7 +526,7 @@ class Router:
       plog("INFO", "No version and/or OS for router " + ns.nickname)
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
         ns.flags, ip, version, os, uptime, published, contact, rate_limited,
-        ns.orhash, ns.bandwidth)
+        ns.orhash, ns.bandwidth, extra_info_digest)
   build_from_desc = Callable(build_from_desc)
 
   def update_to(self, new):
