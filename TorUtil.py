@@ -24,7 +24,7 @@ else:
 
 __all__ = ["Enum", "Enum2", "Callable", "sort_list", "quote", "escape_dots", "unescape_dots",
       "BufSock", "secret_to_key", "urandom_rng", "s2k_gen", "s2k_check", "plog", 
-     "ListenSocket", "zprob", "logfile", "loglevel"]
+     "ListenSocket", "zprob", "logfile", "loglevel", "loglevels"]
 
 # TODO: This isn't the right place for these.. But at least it's unified.
 tor_port = 9060
