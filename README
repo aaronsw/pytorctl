@@ -28,12 +28,12 @@ creation, stream bandwidth, and circuit failure information.
 All of these modules are pydoced. For more detailed information than
 the above overview, you can do:
 
-# pydoc TorCtl
-# pydoc PathSupport
-# pydoc StatsSupport
+# pydoc TorCtl.TorCtl
+# pydoc TorCtl.PathSupport
+# pydoc TorCtl.StatsSupport
 
 There is a minimalistic example of usage of the basic TorCtl.Connection
-and TorCtl.EventHandler in run_example() in TorCtl.py in this directory.
+and TorCtl.EventHandler in run_example() in TorCtl/TorCtl.py.
 Other components also have unit tests at the end of their source files.
 
 For more extensive examples of the PathSupport and StatsSupport
