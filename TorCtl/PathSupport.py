@@ -48,20 +48,21 @@ the restrictions fit together, and what options are available.
 
 """
 
-import TorCtl
+from . import TorCtl
 import re
 import struct
 import random
 import socket
 import copy
-import Queue
+import queue
 import time
-import TorUtil
+from . import TorUtil
 import traceback
 import threading
-from TorUtil import *
+from .TorUtil import *
 
 import sys
+from functools import reduce
 if sys.version_info < (2, 5):
   from sets import Set as set
 
@@ -128,12 +129,10 @@ class PathRestrictionList(MetaPathRestriction):
 
   def del_restriction(self, RestrictionClass):
     "Remove all PathRestrictions of type RestrictionClass from the list."
-    self.restrictions = filter(
-        lambda r: not isinstance(r, RestrictionClass),
-          self.restrictions)
+    self.restrictions = [r for r in self.restrictions if not isinstance(r, RestrictionClass)]
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(map(str, self.restrictions))+")"
+    return self.__class__.__name__+"("+str(list(map(str, self.restrictions)))+")"
 
 class NodeGenerator:
   "Interface for node generation"
@@ -160,7 +159,7 @@ class NodeGenerator:
     the restrictions change. """
     if sorted_r != None:
       self.sorted_r = sorted_r
-    self.rstr_routers = filter(lambda r: self.rstr_list.r_is_ok(r), self.sorted_r)
+    self.rstr_routers = [r for r in self.sorted_r if self.rstr_list.r_is_ok(r)]
     if not self.rstr_routers:
       plog("NOTICE", "No routers left after restrictions applied: "+str(self.rstr_list))
       raise NoNodesRemain(str(self.rstr_list))
@@ -362,7 +361,7 @@ class VersionIncludeRestriction(NodeRestriction):
   """Require that the version match one in the list"""
   def __init__(self, eq):
     "Constructor. 'eq' is a list of versions as strings"
-    self.eq = map(TorCtl.RouterVersion, eq)
+    self.eq = list(map(TorCtl.RouterVersion, eq))
   
   def r_is_ok(self, router):
     """Returns true if the version of 'router' matches one of the 
@@ -379,7 +378,7 @@ class VersionExcludeRestriction(NodeRestriction):
   """Require that the version not match one in the list"""
   def __init__(self, exclude):
     "Constructor. 'exclude' is a list of versions as strings"
-    self.exclude = map(TorCtl.RouterVersion, exclude)
+    self.exclude = list(map(TorCtl.RouterVersion, exclude))
   
   def r_is_ok(self, router):
     """Returns false if the version of 'router' matches one of the 
@@ -390,7 +389,7 @@ class VersionExcludeRestriction(NodeRestriction):
     return True
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(map(str, self.exclude))+")"
+    return self.__class__.__name__+"("+str(list(map(str, self.exclude)))+")"
 
 class VersionRangeRestriction(NodeRestriction):
   """Require that the versions be inside a specified range""" 
@@ -441,7 +440,7 @@ class OrNodeRestriction(MetaNodeRestriction):
     return False
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(map(str, self.rstrs))+")"
+    return self.__class__.__name__+"("+str(list(map(str, self.rstrs)))+")"
 
 class NotNodeRestriction(MetaNodeRestriction):
   """Negates a single restriction"""
@@ -469,7 +468,7 @@ class AtLeastNNodeRestriction(MetaNodeRestriction):
     else: return True
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(map(str, self.rstrs))+","+str(self.n)+")"
+    return self.__class__.__name__+"("+str(list(map(str, self.rstrs)))+","+str(self.n)+")"
 
 class NodeRestrictionList(MetaNodeRestriction):
   "Class to manage a list of NodeRestrictions"
@@ -493,16 +492,14 @@ class NodeRestrictionList(MetaNodeRestriction):
        Does NOT inspect or collapse MetaNode Restrictions (though 
        MetaRestrictions can be removed if RestrictionClass is 
        MetaNodeRestriction)"""
-    self.restrictions = filter(
-        lambda r: not isinstance(r, RestrictionClass),
-          self.restrictions)
+    self.restrictions = [r for r in self.restrictions if not isinstance(r, RestrictionClass)]
   
   def clear(self):
     """ Remove all restrictions """
     self.restrictions = []
 
   def __str__(self):
-    return self.__class__.__name__+"("+str(map(str, self.restrictions))+")"
+    return self.__class__.__name__+"("+str(list(map(str, self.restrictions)))+")"
 
 
 #################### Path Restrictions #####################
@@ -525,7 +522,7 @@ class UniqueRestriction(PathRestriction):
   """Path restriction that mandates that the same router can't appear more
      than once in a path"""
   def path_is_ok(self, path):
-    for i in xrange(0,len(path)):
+    for i in range(0,len(path)):
       if path[i] in path[:i]:
         return False
     return True
@@ -568,8 +565,8 @@ class ExcludeCountriesRestriction(NodeRestriction):
 class UniqueCountryRestriction(PathRestriction):
   """ Ensure every router to have a distinct country_code """
   def path_is_ok(self, path):
-    for i in xrange(0, len(path)-1):
-      for j in xrange(i+1, len(path)):
+    for i in range(0, len(path)-1):
+      for j in range(i+1, len(path)):
         if path[i].country_code == path[j].country_code:
           return False;
     return True;
@@ -629,8 +626,8 @@ class ContinentJumperRestriction(PathRestriction):
 class UniqueContinentRestriction(PathRestriction):
   """ Ensure every hop to be on a different continent """
   def path_is_ok(self, path):
-    for i in xrange(0, len(path)-1):
-      for j in xrange(i+1, len(path)):
+    for i in range(0, len(path)-1):
+      for j in range(i+1, len(path)):
         if path[i].continent == path[j].continent:
           return False;
     return True;
@@ -677,16 +674,14 @@ class ExactUniformGenerator(NodeGenerator):
     NodeGenerator.__init__(self, sorted_r, rstr_list)  
 
   def generate(self):
-    min_gen = min(map(lambda r: r._generated[self.position], self.routers))
-    choices = filter(lambda r: r._generated[self.position]==min_gen, 
-                       self.routers)
+    min_gen = min([r._generated[self.position] for r in self.routers])
+    choices = [r for r in self.routers if r._generated[self.position]==min_gen]
     while choices:
       r = random.choice(choices)
       yield r
       choices.remove(r)
 
-    choices = filter(lambda r: r._generated[self.position]==min_gen,
-                       self.routers)
+    choices = [r for r in self.routers if r._generated[self.position]==min_gen]
     plog("NOTICE", "Ran out of choices in ExactUniformGenerator. Incrementing nodes")
     for r in choices:
       r._generated[self.position] += 1
@@ -701,7 +696,7 @@ class ExactUniformGenerator(NodeGenerator):
     for r in self.rstr_routers:
       lgen = len(r._generated)
       if lgen < self.position+1:
-        for i in xrange(lgen, self.position+1):
+        for i in range(lgen, self.position+1):
           r._generated.append(0)
 
 
@@ -903,15 +898,15 @@ class PathSelector:
       plog("DEBUG", "Building path..")
       try:
         if pathlen == 1:
-          path = [ext.next()]
+          path = [next(ext)]
         else:
-          path.append(entry.next())
-          for i in xrange(1, pathlen-1):
-            path.append(mid.next())
-          path.append(ext.next())
+          path.append(next(entry))
+          for i in range(1, pathlen-1):
+            path.append(next(mid))
+          path.append(next(ext))
         if self.path_restrict.path_is_ok(path):
           self.entry_gen.mark_chosen(path[0])
-          for i in xrange(1, pathlen-1):
+          for i in range(1, pathlen-1):
             self.mid_gen.mark_chosen(path[i])
           self.exit_gen.mark_chosen(path[pathlen-1])
           plog("DEBUG", "Marked path.")
@@ -1203,7 +1198,7 @@ class SelectionManager(BaseSelectionManager):
       try:
         self.path_selector.exit_gen.rebuild()
         self.bad_restrictions = False
-      except RestrictionError, e:
+      except RestrictionError as e:
         plog("WARN", "Restriction error "+str(e)+" after set_exit")
         self.bad_restrictions = True
     return self.bad_restrictions
@@ -1231,7 +1226,7 @@ class SelectionManager(BaseSelectionManager):
     # Try to choose an exit node in the destination country
     # needs an IP != 255.255.255.255
     if self.geoip_config and self.geoip_config.echelon:
-      import GeoIPSupport
+      from . import GeoIPSupport
       c = GeoIPSupport.get_country(ip)
       if c:
         plog("INFO", "[Echelon] IP "+ip+" is in ["+c+"]")
@@ -1274,7 +1269,7 @@ class Circuit:
 
   def id_path(self):
     "Returns a list of idhex keys for the path of Routers"
-    return map(lambda r: r.idhex, self.path)
+    return [r.idhex for r in self.path]
 
 class Stream:
   "Class to describe a stream"
@@ -1416,8 +1411,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
     self.streams = {}
     self.selmgr = selmgr
     self.selmgr.reconfigure(self.current_consensus())
-    self.imm_jobs = Queue.Queue()
-    self.low_prio_jobs = Queue.Queue()
+    self.imm_jobs = queue.Queue()
+    self.low_prio_jobs = queue.Queue()
     self.run_all_jobs = False
     self.do_reconfigure = False
     self.strm_selector = strm_selector
@@ -1444,8 +1439,8 @@ class PathBuilder(TorCtl.ConsensusTracker):
     ExactUniformGenerator state.
     """
     plog("DEBUG", "Resetting _generated values for ExactUniformGenerator")
-    for r in self.routers.itervalues():
-      for g in xrange(0, len(r._generated)):
+    for r in self.routers.values():
+      for g in range(0, len(r._generated)):
         r._generated[g] = 0
 
   def is_urgent_event(event):
@@ -1509,17 +1504,17 @@ class PathBuilder(TorCtl.ConsensusTracker):
 
   def close_all_streams(self, reason):
     """ Close all open streams """
-    for strm in self.streams.itervalues():
+    for strm in self.streams.values():
       if not strm.ignored:
         try:
           self.c.close_stream(strm.strm_id, reason)
-        except TorCtl.ErrorReply, e:
+        except TorCtl.ErrorReply as e:
           # This can happen. Streams can timeout before this call.
           plog("NOTICE", "Error closing stream "+str(strm.strm_id)+": "+str(e))
 
   def close_all_circuits(self):
     """ Close all open circuits """
-    for circ in self.circuits.itervalues():
+    for circ in self.circuits.values():
       self.close_circuit(circ.circ_id)
 
   def close_circuit(self, id):
@@ -1529,13 +1524,13 @@ class PathBuilder(TorCtl.ConsensusTracker):
     if self.circuits[id].requested_closed: return
     self.circuits[id].requested_closed = True
     try: self.c.close_circuit(id)
-    except TorCtl.ErrorReply, e: 
+    except TorCtl.ErrorReply as e: 
       plog("ERROR", "Failed closing circuit " + str(id) + ": " + str(e))
 
   def circuit_list(self):
     """ Return an iterator or a list of circuits prioritized for 
         stream selection."""
-    return self.circuits.itervalues()
+    return iter(self.circuits.values())
 
   def attach_stream_any(self, stream, badcircs):
     "Attach a stream to a valid circuit, avoiding any in 'badcircs'"
@@ -1544,7 +1539,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
     if self.new_nym:
       self.new_nym = False
       plog("DEBUG", "Obeying new nym")
-      for key in self.circuits.keys():
+      for key in list(self.circuits.keys()):
         if (not self.circuits[key].dirty
             and len(self.circuits[key].pending_streams)):
           plog("WARN", "New nym called, destroying circuit "+str(key)
@@ -1564,7 +1559,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
             self.c.attach_stream(stream.strm_id, circ.circ_id)
             stream.pending_circ = circ # Only one possible here
             circ.pending_streams.append(stream)
-          except TorCtl.ErrorReply, e:
+          except TorCtl.ErrorReply as e:
             # No need to retry here. We should get the failed
             # event for either the circ or stream next
             plog("WARN", "Error attaching new stream: "+str(e.args))
@@ -1575,24 +1570,24 @@ class PathBuilder(TorCtl.ConsensusTracker):
       try:
         self.selmgr.set_target(stream.host, stream.port)
         circ = self.c.build_circuit(self.selmgr.select_path())
-      except RestrictionError, e:
+      except RestrictionError as e:
         # XXX: Dress this up a bit
         self.last_exit = None
         # Kill this stream
         plog("WARN", "Closing impossible stream "+str(stream.strm_id)+" ("+str(e)+")")
         try:
           self.c.close_stream(stream.strm_id, "4") # END_STREAM_REASON_EXITPOLICY
-        except TorCtl.ErrorReply, e:
+        except TorCtl.ErrorReply as e:
           plog("WARN", "Error closing stream: "+str(e))
         return
-      except TorCtl.ErrorReply, e:
+      except TorCtl.ErrorReply as e:
         plog("WARN", "Error building circ: "+str(e.args))
         self.last_exit = None
         # Kill this stream
         plog("NOTICE", "Closing stream "+str(stream.strm_id))
         try:
           self.c.close_stream(stream.strm_id, "5") # END_STREAM_REASON_DESTROY
-        except TorCtl.ErrorReply, e:
+        except TorCtl.ErrorReply as e:
           plog("WARN", "Error closing stream: "+str(e))
         return
       for u in unattached_streams:
@@ -1644,7 +1639,7 @@ class PathBuilder(TorCtl.ConsensusTracker):
       try:
         for stream in self.circuits[c.circ_id].pending_streams:
           self.c.attach_stream(stream.strm_id, c.circ_id)
-      except TorCtl.ErrorReply, e:
+      except TorCtl.ErrorReply as e:
         # No need to retry here. We should get the failed
         # event for either the circ or stream in the next event
         plog("NOTICE", "Error attaching pending stream: "+str(e.args))
@@ -1823,7 +1818,7 @@ class CircuitHandler(PathBuilder):
   def check_circuit_pool(self):
     """ Init or check the status of the circuit-pool """
     # Get current number of circuits
-    n = len(self.circuits.values())
+    n = len(list(self.circuits.values()))
     i = self.num_circuits-n
     if i > 0:
       plog("INFO", "Checked pool of circuits: we need to build " + 
@@ -1844,11 +1839,11 @@ class CircuitHandler(PathBuilder):
         circ = self.c.build_circuit(self.selmgr.select_path())
         self.circuits[circ.circ_id] = circ
         return circ
-      except RestrictionError, e:
+      except RestrictionError as e:
         # XXX: Dress this up a bit
         traceback.print_exc()
         plog("ERROR", "Impossible restrictions: "+str(e))
-      except TorCtl.ErrorReply, e:
+      except TorCtl.ErrorReply as e:
         traceback.print_exc()
         plog("WARN", "Error building circuit: " + str(e.args))
 
@@ -1936,7 +1931,7 @@ def do_gen_unit(gen, r_list, weight_bw, num_print):
       trials += weight_bw(gen, r)
   trials = int(trials/1024)
   
-  print "Running "+str(trials)+" trials"
+  print("Running "+str(trials)+" trials")
 
   # 0. Reset r.chosen = 0 for all routers
   for r in r_list:
@@ -1950,8 +1945,8 @@ def do_gen_unit(gen, r_list, weight_bw, num_print):
 
   gen.rewind()
   rtrs = gen.generate()
-  for i in xrange(1, trials):
-    r = rtrs.next()
+  for i in range(1, trials):
+    r = next(rtrs)
     r.chosen += 1
 
   TorUtil.loglevel = loglevel
@@ -1962,9 +1957,9 @@ def do_gen_unit(gen, r_list, weight_bw, num_print):
   copy_rlist.sort(lambda x, y: cmp(y.chosen, x.chosen))
   for r in copy_rlist:
     if r.chosen and not gen.rstr_list.r_is_ok(r):
-      print "WARN: Restriction fail at "+r.idhex
+      print("WARN: Restriction fail at "+r.idhex)
     if not r.chosen and gen.rstr_list.r_is_ok(r):
-      print "WARN: Generation fail at "+r.idhex
+      print("WARN: Generation fail at "+r.idhex)
     if not gen.rstr_list.r_is_ok(r): continue
     flag = ""
     bw = int(weight_bw(gen, r))
@@ -1972,21 +1967,21 @@ def do_gen_unit(gen, r_list, weight_bw, num_print):
       flag += "E"
     if "Guard" in r.flags:
       flag += "G"
-    print str(r.list_rank)+". "+r.nickname+" "+str(r.bw/1024.0)+"/"+str(bw/1024.0)+": "+str(r.chosen)+", "+flag
+    print(str(r.list_rank)+". "+r.nickname+" "+str(r.bw/1024.0)+"/"+str(bw/1024.0)+": "+str(r.chosen)+", "+flag)
     i += 1
     if i > num_print: break
 
 def do_unit(rst, r_list, plamb):
-  print "\n"
-  print "-----------------------------------"
-  print rst.r_is_ok.im_class
+  print("\n")
+  print("-----------------------------------")
+  print(rst.r_is_ok.__self__.__class__)
   above_i = 0
   above_bw = 0
   below_i = 0
   below_bw = 0
   for r in r_list:
     if rst.r_is_ok(r):
-      print r.nickname+" "+plamb(r)+"="+str(rst.r_is_ok(r))+" "+str(r.bw)
+      print(r.nickname+" "+plamb(r)+"="+str(rst.r_is_ok(r))+" "+str(r.bw))
       if r.bw > 400000:
         above_i = above_i + 1
         above_bw += r.bw
@@ -1994,8 +1989,8 @@ def do_unit(rst, r_list, plamb):
         below_i = below_i + 1
         below_bw += r.bw
         
-  print "Routers above: " + str(above_i) + " bw: " + str(above_bw)
-  print "Routers below: " + str(below_i) + " bw: " + str(below_bw)
+  print("Routers above: " + str(above_i) + " bw: " + str(above_bw))
+  print("Routers below: " + str(below_i) + " bw: " + str(below_bw))
 
 # TODO: Tests:
 #  - Test each NodeRestriction and print in/out lines for it
@@ -2013,7 +2008,7 @@ if __name__ == '__main__':
   sorted_rlist = c.read_routers(c.get_network_status())
 
   sorted_rlist.sort(lambda x, y: cmp(y.bw, x.bw))
-  for i in xrange(len(sorted_rlist)): sorted_rlist[i].list_rank = i
+  for i in range(len(sorted_rlist)): sorted_rlist[i].list_rank = i
 
   def flag_weighting(bwgen, r):
     bw = r.bw
@@ -2049,7 +2044,7 @@ FlagsRestriction(["Valid"])])),
  
   for r in sorted_rlist:
     if r.will_exit_to("211.11.21.22", 465):
-      print r.nickname+" "+str(r.bw)
+      print(r.nickname+" "+str(r.bw))
 
   do_unit(FlagsRestriction(["Guard"], []), sorted_rlist, lambda r: " ".join(r.flags))
   do_unit(FlagsRestriction(["Fast"], []), sorted_rlist, lambda r: " ".join(r.flags))
@@ -2089,21 +2084,21 @@ FlagsRestriction(["Valid"])])),
   ug.rewind()
   rlist = []
   for r in ug.generate():
-    print "Checking: " + r.nickname
+    print("Checking: " + r.nickname)
     for rs in rl:
       if not rs.r_is_ok(r):
         raise PathError()
     if not "Exit" in r.flags:
-      print "No exit in flags of "+r.idhex
+      print("No exit in flags of "+r.idhex)
       for e in r.exitpolicy:
-        print " "+str(e)
-      print " 80: "+str(r.will_exit_to("255.255.255.255", 80))
-      print " 443: "+str(r.will_exit_to("255.255.255.255", 443))
-      print " 6667: "+str(r.will_exit_to("255.255.255.255", 6667))
+        print(" "+str(e))
+      print(" 80: "+str(r.will_exit_to("255.255.255.255", 80)))
+      print(" 443: "+str(r.will_exit_to("255.255.255.255", 443)))
+      print(" 6667: "+str(r.will_exit_to("255.255.255.255", 6667)))
 
     ug.mark_chosen(r)
     rlist.append(r)
   for r in sorted_rlist:
     if "Exit" in r.flags and not r in rlist:
-      print r.idhex+" is an exit not in rl!"
+      print(r.idhex+" is an exit not in rl!")
         

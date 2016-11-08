@@ -1,13 +1,13 @@
 #!/usr/bin/python
 # Copyright 2009-2010 Mike Perry. See LICENSE file.
-import PathSupport
+from . import PathSupport
 import threading
 import copy
 import time
 import shutil
-import TorCtl
+from . import TorCtl
 
-from TorUtil import plog
+from .TorUtil import plog
 
 SQLSupport = None
 
@@ -178,7 +178,7 @@ class SQLScanHandler(ScanHandler):
     # Only require sqlalchemy if we really need it.
     global SQLSupport
     if SQLSupport is None:
-      import SQLSupport
+      from . import SQLSupport
     ScanHandler.__init__(self, c, selmgr, RouterClass, strm_selector)
 
   def attach_sql_listener(self, db_uri):
@@ -230,7 +230,7 @@ class SQLScanHandler(ScanHandler):
       SQLSupport.tc_session.close()
       try:
         shutil.copy(sql_file, new_file)
-      except Exception,e:
+      except Exception as e:
         plog("WARN", "Error moving sql file: "+str(e))
       SQLSupport.reset_all()
       cond.notify()

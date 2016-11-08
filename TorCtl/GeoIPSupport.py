@@ -3,10 +3,10 @@
 
 import struct
 import socket
-import TorCtl
-import StatsSupport
+from . import TorCtl
+from . import StatsSupport
 
-from TorUtil import plog
+from .TorUtil import plog
 try:
   import GeoIP
   # GeoIP data object: choose database here

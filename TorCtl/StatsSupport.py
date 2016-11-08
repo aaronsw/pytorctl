@@ -45,10 +45,11 @@ import time
 import math
 import traceback
 
-import TorUtil, PathSupport, TorCtl
-from TorUtil import *
-from PathSupport import *
-from TorUtil import meta_port, meta_host, control_port, control_host
+from . import TorUtil, PathSupport, TorCtl
+from .TorUtil import *
+from .PathSupport import *
+from .TorUtil import meta_port, meta_host, control_port, control_host
+from functools import reduce
 
 class ReasonRouterList:
   "Helper class to track which Routers have failed for a given reason"
@@ -93,7 +94,7 @@ class ReasonRouterList:
         if self.reason in y.reason_failed:
           return (x + y.reason_failed[self.reason])
         else: return x
-    return reduce(notlambda, self.rlist.iterkeys(), 0)
+    return reduce(notlambda, iter(self.rlist.keys()), 0)
 
   def total_failed(self):
     "Get a list of total failures for this reason"
@@ -101,7 +102,7 @@ class ReasonRouterList:
       if self.reason in y.reason_failed:
         return (x + y.reason_failed[self.reason])
       else: return x
-    return reduce(notlambda, self.rlist.iterkeys(), 0)
+    return reduce(notlambda, iter(self.rlist.keys()), 0)
  
 class SuspectRouterList(ReasonRouterList):
   """Helper class to track all routers suspected of failing for a given
@@ -110,14 +111,14 @@ class SuspectRouterList(ReasonRouterList):
   def __init__(self, reason): ReasonRouterList.__init__(self,reason)
   
   def sort_list(self):
-    rlist = self.rlist.keys()
+    rlist = list(self.rlist.keys())
     rlist.sort(lambda x, y: cmp(y.reason_suspected[self.reason],
                   x.reason_suspected[self.reason]))
     return rlist
    
   def _verify_suspected(self):
     return reduce(lambda x, y: x + y.reason_suspected[self.reason],
-            self.rlist.iterkeys(), 0)
+            iter(self.rlist.keys()), 0)
 
 class FailedRouterList(ReasonRouterList):
   """Helper class to track all routers that failed for a given
@@ -126,14 +127,14 @@ class FailedRouterList(ReasonRouterList):
   def __init__(self, reason): ReasonRouterList.__init__(self,reason)
 
   def sort_list(self):
-    rlist = self.rlist.keys()
+    rlist = list(self.rlist.keys())
     rlist.sort(lambda x, y: cmp(y.reason_failed[self.reason],
                   x.reason_failed[self.reason]))
     return rlist
 
   def _verify_failed(self):
     return reduce(lambda x, y: x + y.reason_failed[self.reason],
-            self.rlist.iterkeys(), 0)
+            iter(self.rlist.keys()), 0)
 class BandwidthStats:
   "Class that manages observed bandwidth through a Router"
   def __init__(self):
@@ -148,7 +149,7 @@ class BandwidthStats:
     "Expectation - weighted average of the bandwidth through this node"
     tot_bw = reduce(lambda x, y: x+y, self.byte_list, 0.0)
     EX = 0.0
-    for i in xrange(len(self.byte_list)):
+    for i in range(len(self.byte_list)):
       EX += (self.byte_list[i]*self.byte_list[i])/self.duration_list[i]
     if tot_bw == 0.0: return 0.0
     EX /= tot_bw
@@ -158,7 +159,7 @@ class BandwidthStats:
     "Second moment of the bandwidth"
     tot_bw = reduce(lambda x, y: x+y, self.byte_list, 0.0)
     EX = 0.0
-    for i in xrange(len(self.byte_list)):
+    for i in range(len(self.byte_list)):
       EX += (self.byte_list[i]**3)/(self.duration_list[i]**2)
     if tot_bw == 0.0: return 0.0
     EX /= tot_bw
@@ -390,7 +391,7 @@ class StatsRouter(TorCtl.Router):
       plog("ERROR", self.nickname+" does not add up for streams")
     def check_reasons(reasons, expected, which, rtype):
       count = 0
-      for rs in reasons.iterkeys():
+      for rs in reasons.keys():
         if re.search(r"^"+which, rs): count += reasons[rs]
       if count != expected:
         plog("ERROR", "Mismatch "+which+" "+rtype+" for "+self.nickname)
@@ -469,35 +470,35 @@ class StatsHandler(PathSupport.PathBuilder):
     n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
     if n == 0: return (0, 0)
     avg = reduce(lambda x, y: x+y.bw, 
-            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+            [r for r in self.sorted_r if r.was_used()], 0)/float(n)
     return avg 
 
   def avg_circ_failure(self):
     n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
     if n == 0: return (0, 0)
     avg = reduce(lambda x, y: x+y.circ_fail_rate(), 
-            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+            [r for r in self.sorted_r if r.was_used()], 0)/float(n)
     return avg 
 
   def avg_stream_failure(self):
     n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
     if n == 0: return (0, 0)
     avg = reduce(lambda x, y: x+y.strm_fail_rate(), 
-            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+            [r for r in self.sorted_r if r.was_used()], 0)/float(n)
     return avg 
 
   def avg_circ_suspects(self):
     n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
     if n == 0: return (0, 0)
     avg = reduce(lambda x, y: x+y.circ_suspect_rate(), 
-            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+            [r for r in self.sorted_r if r.was_used()], 0)/float(n)
     return avg 
 
   def avg_stream_suspects(self):
     n = reduce(lambda x, y: x+y.was_used(), self.sorted_r, 0)
     if n == 0: return (0, 0)
     avg = reduce(lambda x, y: x+y.strm_suspect_rate(), 
-            filter(lambda r: r.was_used(), self.sorted_r), 0)/float(n)
+            [r for r in self.sorted_r if r.was_used()], 0)/float(n)
     return avg 
 
   def write_reasons(self, f, reasons, name):
@@ -573,8 +574,8 @@ class StatsHandler(PathSupport.PathBuilder):
           plog("ERROR", "Router "+r.idhex+" missing from suspect table")
 
     # Sanity check the lists the other way
-    for rsn in self.failed_reasons.itervalues(): rsn._verify_failed()
-    for rsn in self.suspect_reasons.itervalues(): rsn._verify_suspected()
+    for rsn in self.failed_reasons.values(): rsn._verify_failed()
+    for rsn in self.suspect_reasons.values(): rsn._verify_suspected()
 
     f = file(filename, "w")
     f.write(StatsRouter.key)
@@ -641,12 +642,12 @@ class StatsHandler(PathSupport.PathBuilder):
     # if we ever want to do non-uniform scanning..
 
     # FIXME: Add failed in here somehow..
-    susp_reasons = self.suspect_reasons.values()
+    susp_reasons = list(self.suspect_reasons.values())
     susp_reasons.sort(lambda x, y:
        cmp(y.total_suspected(), x.total_suspected()))
     self.write_reasons(f, susp_reasons, "Suspect Reasons")
 
-    fail_reasons = self.failed_reasons.values()
+    fail_reasons = list(self.failed_reasons.values())
     fail_reasons.sort(lambda x, y:
        cmp(y.total_failed(), x.total_failed()))
     self.write_reasons(f, fail_reasons, "Failed Reasons")
@@ -667,7 +668,7 @@ class StatsHandler(PathSupport.PathBuilder):
     self.circ_failed = 0
     self.suspect_reasons.clear()
     self.failed_reasons.clear()
-    for r in self.routers.itervalues(): r.reset()
+    for r in self.routers.values(): r.reset()
 
   def close_circuit(self, id):
     PathSupport.PathBuilder.close_circuit(self, id)
@@ -696,7 +697,7 @@ class StatsHandler(PathSupport.PathBuilder):
           if r_ext[0] != '$': r_ext = self.name_to_key[r_ext]
           self.routers[r_ext[1:]].total_extend_time += delta
           self.routers[r_ext[1:]].total_extended += 1
-        except KeyError, e:
+        except KeyError as e:
           traceback.print_exc()
           plog("WARN", "No key "+str(e)+" for "+r_ext+" in dict:"+str(self.name_to_key))
       elif c.status == "FAILED":

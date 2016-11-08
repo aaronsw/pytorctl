@@ -42,7 +42,7 @@ import re
 import struct
 import sys
 import threading
-import Queue
+import queue
 import datetime
 import traceback
 import socket
@@ -52,7 +52,7 @@ import types
 import time
 import copy
 
-from TorUtil import *
+from .TorUtil import *
 
 if sys.version_info < (2, 5):
   from sets import Set as set
@@ -126,21 +126,21 @@ def connect(controlAddr="127.0.0.1", controlPort=9051, passphrase=None):
     
     conn.authenticate(authValue)
     return conn
-  except socket.error, exc:
+  except socket.error as exc:
     if "Connection refused" in exc.args:
       # most common case - tor control port isn't available
-      print "Connection refused. Is the ControlPort enabled?"
-    else: print "Failed to establish socket: %s" % exc
+      print("Connection refused. Is the ControlPort enabled?")
+    else: print("Failed to establish socket: %s" % exc)
     
     return None
-  except Exception, exc:
+  except Exception as exc:
     if passphrase and str(exc) == "Unable to authenticate: password incorrect":
       # provide a warning that the provided password didn't work, then try
       # again prompting for the user to enter it
-      print INCORRECT_PASSWORD_MSG
+      print(INCORRECT_PASSWORD_MSG)
       return connect(controlAddr, controlPort)
     else:
-      print exc
+      print(exc)
       return None
 
 class TorCtlError(Exception):
@@ -177,7 +177,7 @@ class NetworkStatus:
     self.idhex = (self.idhash + "=").decode("base64").encode("hex").upper()
     self.bandwidth = bandwidth
     m = re.search(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)", updated)
-    self.updated = datetime.datetime(*map(int, m.groups()))
+    self.updated = datetime.datetime(*list(map(int, m.groups())))
 
 class Event:
   def __init__(self, event_name):
@@ -385,7 +385,7 @@ desc_re = {
   "published": r"(\S+ \S+)",
 }
 # Compile each regular expression now.
-for kw, reg in desc_re.iteritems():
+for kw, reg in desc_re.items():
   desc_re[kw] = re.compile(reg)
 
 def partition(string, delimiter):
@@ -495,7 +495,7 @@ class Router:
       elif kw == "router":
         router,ip = g
       elif kw == "bandwidth":
-        bws = map(int, g)
+        bws = list(map(int, g))
         bw_observed = min(bws)
         rate_limited = False
         if bws[0] < bws[1]:
@@ -534,7 +534,7 @@ class Router:
     'new' """
     if self.idhex != new.idhex:
       plog("ERROR", "Update of router "+self.nickname+"changes idhex!")
-    for i in new.__dict__.iterkeys():
+    for i in new.__dict__.keys():
       if i == "refcount" or i == "_generated": continue
       self.__dict__[i] = new.__dict__[i]
 
@@ -558,13 +558,13 @@ class Connection:
     self._handler = None
     self._handleFn = None
     self._sendLock = threading.RLock()
-    self._queue = Queue.Queue()
+    self._queue = queue.Queue()
     self._thread = None
     self._closedEx = None
     self._closed = 0
     self._closeHandler = None
     self._eventThread = None
-    self._eventQueue = Queue.Queue()
+    self._eventQueue = queue.Queue()
     self._s = BufSock(sock)
     self._debugFile = None
     
@@ -584,7 +584,7 @@ class Connection:
       # check PROTOCOLINFO for authentication type
       try:
         authInfo = self.sendAndRecv("PROTOCOLINFO\r\n")[1][1]
-      except ErrorReply, exc:
+      except ErrorReply as exc:
         raise IOError("Unable to query PROTOCOLINFO for the authentication type: %s" % exc)
       
       authType, cookiePath = None, None
@@ -681,7 +681,7 @@ class Connection:
       except TorCtlClosed:
         plog("NOTICE", "Tor closed control connection. Exiting event thread.")
         return
-      except Exception,e:
+      except Exception as e:
         if not self._closed:
           if sys:
             self._err(sys.exc_info())
@@ -704,9 +704,9 @@ class Connection:
         else:
           cb(reply)
 
-  def _err(self, (tp, ex, tb), fromEventLoop=0):
+  def _err(self, xxx_todo_changeme, fromEventLoop=0):
     """DOCDOC"""
-    # silent death is bad :(
+    (tp, ex, tb) = xxx_todo_changeme
     traceback.print_exception(tp, ex, tb)
     if self._s:
       try:
@@ -724,7 +724,7 @@ class Connection:
         cb = self._queue.get(timeout=0)
         if cb != "CLOSE":
           cb("EXCEPTION")
-      except Queue.Empty:
+      except queue.Empty:
         break
     if self._closeHandler is not None:
       self._closeHandler(ex)
@@ -889,7 +889,7 @@ class Connection:
        return a list of (tp,body,extra) tuples.  If it is an
        error, raise ErrorReply.  Otherwise, raise ProtocolError.
     """
-    if type(msg) == types.ListType:
+    if type(msg) == list:
       msg = "".join(msg)
     assert msg.endswith("\r\n")
 
@@ -932,7 +932,7 @@ class Connection:
         authCookie = open(self._cookiePath, "r")
         self.authenticate_cookie(authCookie)
         authCookie.close()
-    except ErrorReply, exc:
+    except ErrorReply as exc:
       if authCookie: authCookie.close()
       issue = str(exc)
       
@@ -945,7 +945,7 @@ class Connection:
           issue = "cookie value incorrect"
       
       raise ErrorReply("Unable to authenticate: %s" % issue)
-    except IOError, exc:
+    except IOError as exc:
       if authCookie: authCookie.close()
       issue = None
       
@@ -1393,7 +1393,7 @@ class EventHandler(EventSink):
       if not m:
         raise ProtocolError("STREAM event misformatted.")
       ident,status,circ,target_host,target_port,reason,remote,source,source_addr,purpose = m.groups()
-      ident,circ = map(int, (ident,circ))
+      ident,circ = list(map(int, (ident,circ)))
       if not target_host: # This can happen on SOCKS_PROTOCOL failures
         target_host = "(none)"
       if reason: reason = reason[8:]
@@ -1432,7 +1432,7 @@ class EventHandler(EventSink):
       m = re.match(r"(\d+)\s+(\d+)", body)
       if not m:
         raise ProtocolError("BANDWIDTH event misformatted.")
-      read, written = map(long, m.groups())
+      read, written = list(map(int, m.groups()))
       event = BWEvent(evtype, read, written)
     elif evtype in ("DEBUG", "INFO", "NOTICE", "WARN", "ERR"):
       event = LogEvent(evtype, body)
@@ -1602,7 +1602,7 @@ class ConsensusTracker(EventHandler):
     routers = self.c.read_routers(nslist) # Sets .down if 3,4,5
     self.consensus_count = len(routers)
     old_idhexes = set(self.routers.keys())
-    new_idhexes = set(map(lambda r: r.idhex, routers)) 
+    new_idhexes = set([r.idhex for r in routers]) 
     for r in routers:
       if r.idhex in self.routers:
         if self.routers[r.idhex].nickname != r.nickname:
@@ -1616,8 +1616,7 @@ class ConsensusTracker(EventHandler):
         self.routers[rc.idhex] = rc
 
     removed_idhexes = old_idhexes - new_idhexes
-    removed_idhexes.update(set(map(lambda r: r.idhex,
-                                   filter(lambda r: r.down, routers))))
+    removed_idhexes.update(set([r.idhex for r in [r for r in routers if r.down]]))
 
     for i in removed_idhexes:
       if i not in self.routers: continue
@@ -1635,9 +1634,9 @@ class ConsensusTracker(EventHandler):
         plog("INFO", "Postponing expiring non-running router "+i)
         self.routers[i].deleted = True
 
-    self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
+    self.sorted_r = [r for r in iter(self.routers.values()) if not r.down]
     self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
-    for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
+    for i in range(len(self.sorted_r)): self.sorted_r[i].list_rank = i
 
     # XXX: Verification only. Can be removed.
     self._sanity_check(self.sorted_r)
@@ -1649,15 +1648,15 @@ class ConsensusTracker(EventHandler):
     if len(self.ns_map) < self.consensus_count:
       plog("WARN", "NS map count of "+str(len(self.ns_map))+" is below consensus count "+str(self.consensus_count))
 
-    downed =  filter(lambda r: r.down, list)
+    downed =  [r for r in list if r.down]
     for d in downed:
       plog("WARN", "Router "+d.idhex+" still present but is down. Del: "+str(d.deleted)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
  
-    deleted =  filter(lambda r: r.deleted, list)
+    deleted =  [r for r in list if r.deleted]
     for d in deleted:
       plog("WARN", "Router "+d.idhex+" still present but is deleted. Down: "+str(d.down)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
 
-    zero =  filter(lambda r: r.refcount == 0 and r.__class__.__name__ == "StatsRouter", list)
+    zero =  [r for r in list if r.refcount == 0 and r.__class__.__name__ == "StatsRouter"]
     for d in zero:
       plog("WARN", "Router "+d.idhex+" has refcount 0. Del:"+str(d.deleted)+", Down: "+str(d.down)+", flags: "+str(d.flags)+", bw: "+str(d.bw))
  
@@ -1672,11 +1671,11 @@ class ConsensusTracker(EventHandler):
       self._update_consensus(self.c.get_consensus())
     else:
       self._update_consensus(self.c.get_network_status())
-    self._read_routers(self.ns_map.values())
+    self._read_routers(list(self.ns_map.values()))
 
   def new_consensus_event(self, n):
     self._update_consensus(n.nslist)
-    self._read_routers(self.ns_map.values())
+    self._read_routers(list(self.ns_map.values()))
     plog("DEBUG", str(time.time()-n.arrived_at)+" Read " + str(len(n.nslist))
        +" NC => " + str(len(self.sorted_r)) + " routers")
  
@@ -1691,7 +1690,7 @@ class ConsensusTracker(EventHandler):
           plog("WARN", "Need to getinfo ns/id for router desc: "+i)
           ns = self.c.get_network_status("id/"+i)
         r = self.c.read_routers(ns)
-      except ErrorReply, e:
+      except ErrorReply as e:
         plog("WARN", "Error reply for "+i+" after NEWDESC: "+str(e))
         continue
       if not r:
@@ -1718,9 +1717,9 @@ class ConsensusTracker(EventHandler):
         else:
           self.routers[r.idhex] = self.RouterClass(r)
     if update:
-      self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
+      self.sorted_r = [r for r in iter(self.routers.values()) if not r.down]
       self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
-      for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
+      for i in range(len(self.sorted_r)): self.sorted_r[i].list_rank = i
     plog("DEBUG", str(time.time()-d.arrived_at)+ " Read " + str(len(d.idlist))
        +" ND => "+str(len(self.sorted_r))+" routers. Update: "+str(update))
     # XXX: Verification only. Can be removed.
@@ -1747,9 +1746,9 @@ class ConsensusTracker(EventHandler):
           self.routers[ns.idhex].flags = ns.flags
           self.routers[ns.idhex].down = True
     if update:
-      self.sorted_r = filter(lambda r: not r.down, self.routers.itervalues())
+      self.sorted_r = [r for r in iter(self.routers.values()) if not r.down]
       self.sorted_r.sort(lambda x, y: cmp(y.bw, x.bw))
-      for i in xrange(len(self.sorted_r)): self.sorted_r[i].list_rank = i
+      for i in range(len(self.sorted_r)): self.sorted_r[i].list_rank = i
     self._sanity_check(self.sorted_r)
 
   def current_consensus(self):
@@ -1767,7 +1766,7 @@ class DebugEventHandler(EventHandler):
       output.append("REASON=" + circ_event.reason)
     if circ_event.remote_reason:
       output.append("REMOTE_REASON=" + circ_event.remote_reason)
-    print " ".join(output)
+    print(" ".join(output))
 
   def stream_status_event(self, strm_event):
     output = [strm_event.event_name, str(strm_event.strm_id),
@@ -1777,19 +1776,19 @@ class DebugEventHandler(EventHandler):
       output.append("REASON=" + strm_event.reason)
     if strm_event.remote_reason:
       output.append("REMOTE_REASON=" + strm_event.remote_reason)
-    print " ".join(output)
+    print(" ".join(output))
 
   def ns_event(self, ns_event):
     for ns in ns_event.nslist:
-      print " ".join((ns_event.event_name, ns.nickname, ns.idhash,
+      print(" ".join((ns_event.event_name, ns.nickname, ns.idhash,
         ns.updated.isoformat(), ns.ip, str(ns.orport),
-        str(ns.dirport), " ".join(ns.flags)))
+        str(ns.dirport), " ".join(ns.flags))))
 
   def new_consensus_event(self, nc_event):
     self.ns_event(nc_event)
 
   def new_desc_event(self, newdesc_event):
-    print " ".join((newdesc_event.event_name, " ".join(newdesc_event.idlist)))
+    print(" ".join((newdesc_event.event_name, " ".join(newdesc_event.idlist))))
    
   def or_conn_status_event(self, orconn_event):
     if orconn_event.age: age = "AGE="+str(orconn_event.age)
@@ -1802,14 +1801,14 @@ class DebugEventHandler(EventHandler):
     else: reason = ""
     if orconn_event.ncircs: ncircs = "NCIRCS="+str(orconn_event.ncircs)
     else: ncircs = ""
-    print " ".join((orconn_event.event_name, orconn_event.endpoint,
-            orconn_event.status, age, read, wrote, reason, ncircs))
+    print(" ".join((orconn_event.event_name, orconn_event.endpoint,
+            orconn_event.status, age, read, wrote, reason, ncircs)))
 
   def msg_event(self, log_event):
-    print log_event.event_name+" "+log_event.msg
+    print(log_event.event_name+" "+log_event.msg)
   
   def bandwidth_event(self, bw_event):
-    print bw_event.event_name+" "+str(bw_event.read)+" "+str(bw_event.written)
+    print(bw_event.event_name+" "+str(bw_event.read)+" "+str(bw_event.written))
 
 def parseHostAndPort(h):
   """Given a string of the form 'address:port' or 'address' or
@@ -1822,7 +1821,7 @@ def parseHostAndPort(h):
     try:
       port = int(h[i+1:])
     except ValueError:
-      print "Bad hostname %r"%h
+      print("Bad hostname %r"%h)
       sys.exit(1)
   elif h:
     try:
@@ -1836,29 +1835,29 @@ def run_example(host,port):
   """ Example of basic TorCtl usage. See PathSupport for more advanced
       usage.
   """
-  print "host is %s:%d"%(host,port)
+  print("host is %s:%d"%(host,port))
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.connect((host,port))
   c = Connection(s)
   c.set_event_handler(DebugEventHandler())
   th = c.launch_thread()
   c.authenticate()
-  print "nick",`c.get_option("nickname")`
-  print `c.get_info("version")`
+  print("nick",repr(c.get_option("nickname")))
+  print(repr(c.get_info("version")))
   #print `c.get_info("desc/name/moria1")`
-  print `c.get_info("network-status")`
-  print `c.get_info("addr-mappings/all")`
-  print `c.get_info("addr-mappings/config")`
-  print `c.get_info("addr-mappings/cache")`
-  print `c.get_info("addr-mappings/control")`
+  print(repr(c.get_info("network-status")))
+  print(repr(c.get_info("addr-mappings/all")))
+  print(repr(c.get_info("addr-mappings/config")))
+  print(repr(c.get_info("addr-mappings/cache")))
+  print(repr(c.get_info("addr-mappings/control")))
 
-  print `c.extend_circuit(0,["moria1"])`
+  print(repr(c.extend_circuit(0,["moria1"])))
   try:
-    print `c.extend_circuit(0,[""])`
+    print(repr(c.extend_circuit(0,[""])))
   except ErrorReply: # wtf?
-    print "got error. good."
+    print("got error. good.")
   except:
-    print "Strange error", sys.exc_info()[0]
+    print("Strange error", sys.exc_info()[0])
    
   #send_signal(s,1)
   #save_conf(s)
@@ -1877,7 +1876,7 @@ def run_example(host,port):
 
 if __name__ == '__main__':
   if len(sys.argv) > 2:
-    print "Syntax: TorControl.py torhost:torport"
+    print("Syntax: TorControl.py torhost:torport")
     sys.exit(0)
   else:
     sys.argv.append("localhost:9051")

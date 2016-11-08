@@ -15,11 +15,11 @@ import time
 import datetime
 import math
 
-import PathSupport, TorCtl
-from TorUtil import *
-from PathSupport import *
-from TorUtil import meta_port, meta_host, control_port, control_host, control_pass
-from TorCtl import EVENT_TYPE, EVENT_STATE, TorCtlError
+from . import PathSupport, TorCtl
+from .TorUtil import *
+from .PathSupport import *
+from .TorUtil import meta_port, meta_host, control_port, control_host, control_pass
+from .TorCtl import EVENT_TYPE, EVENT_STATE, TorCtlError
 
 import sqlalchemy
 import sqlalchemy.orm.exc
@@ -711,7 +711,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
   def update_consensus(self):
     plog("INFO", "Updating DB with full consensus.")
     self.consensus = self.parent_handler.current_consensus()
-    self._update_db(self.consensus.ns_map.iterkeys())
+    self._update_db(iter(self.consensus.ns_map.keys()))
 
   def set_parent(self, parent_handler):
     if not isinstance(parent_handler, TorCtl.ConsensusTracker):
@@ -756,7 +756,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
                        +str(len(self.consensus.ns_map)))
         elif not PathSupport.PathBuilder.is_urgent_event(e):
           plog("INFO", "Newdesc timer is up. Assuming we have full consensus")
-          self._update_rank_history(self.consensus.ns_map.iterkeys())
+          self._update_rank_history(iter(self.consensus.ns_map.keys()))
           self.last_desc_at = ConsensusTrackerListener.CONSENSUS_DONE
 
   def new_consensus_event(self, n):
@@ -772,8 +772,7 @@ class ConsensusTrackerListener(TorCtl.DualEventListener):
 
 class CircuitListener(TorCtl.PreEventListener):
   def set_parent(self, parent_handler):
-    if not filter(lambda f: f.__class__ == ConsensusTrackerListener, 
-                  parent_handler.post_listeners):
+    if not [f for f in parent_handler.post_listeners if f.__class__ == ConsensusTrackerListener]:
        raise TorCtlError("CircuitListener needs a ConsensusTrackerListener")
     TorCtl.PreEventListener.set_parent(self, parent_handler)
     # TODO: This is really lame. We only know the extendee of a circuit
@@ -1044,7 +1043,7 @@ def run_example(host, port):
   """ Example of basic TorCtl usage. See PathSupport for more advanced
       usage.
   """
-  print "host is %s:%d"%(host,port)
+  print("host is %s:%d"%(host,port))
   setup_db("sqlite:///torflow.sqlite", echo=False)
 
   #print tc_session.query(((func.count(Extension.id)))).filter(and_(FailedExtension.table.c.row_type=='extension', FailedExtension.table.c.from_node_idhex == "7CAA2F5F998053EF5D2E622563DEB4A6175E49AC")).one()
@@ -1063,13 +1062,13 @@ def run_example(host, port):
   c.add_event_listener(ConsensusTrackerListener())
   c.add_event_listener(CircuitListener())
 
-  print `c.extend_circuit(0,["moria1"])`
+  print(repr(c.extend_circuit(0,["moria1"])))
   try:
-    print `c.extend_circuit(0,[""])`
+    print(repr(c.extend_circuit(0,[""])))
   except TorCtl.ErrorReply: # wtf?
-    print "got error. good."
+    print("got error. good.")
   except:
-    print "Strange error", sys.exc_info()[0]
+    print("Strange error", sys.exc_info()[0])
    
   c.set_events([EVENT_TYPE.STREAM, EVENT_TYPE.CIRC,
           EVENT_TYPE.NEWCONSENSUS, EVENT_TYPE.NEWDESC,
