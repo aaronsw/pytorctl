@@ -15,7 +15,7 @@ import binascii
 import math
 import time
 import logging
-import ConfigParser
+import configparser
 
 if sys.version_info < (2, 5):
   from sha import sha as sha1
@@ -56,7 +56,7 @@ class Referrer:
         self.referrers[cl].recurse_store(gc, r, depth+1, max_depth)
 
   def recurse_print(self, rcutoff, depth=""):
-    refs = self.referrers.keys()
+    refs = list(self.referrers.keys())
     refs.sort(lambda x, y: self.referrers[y].count - self.referrers[x].count)
     for r in refs:
       if self.referrers[r].count > rcutoff:
@@ -99,7 +99,7 @@ def __dump_class_ref_counts(gc, referrer_depth, cutoff, rcutoff, ignore):
         if cl in ignore: continue
         if class_counts[cl] > cutoff:
           referrers[cl].recurse_store(gc, obj, 0, referrer_depth)
-  classes = class_counts.keys()
+  classes = list(class_counts.keys())
   classes.sort(lambda x, y: class_counts[y] - class_counts[x])
   for c in classes:
     if class_counts[c] < cutoff: continue
@@ -110,7 +110,7 @@ def __dump_class_ref_counts(gc, referrer_depth, cutoff, rcutoff, ignore):
 
 
 def read_config(filename):
-  config = ConfigParser.SafeConfigParser()
+  config = configparser.SafeConfigParser()
   config.read(filename)
   global tor_port, tor_host, control_port, control_pass, control_host
   global meta_port, meta_host
@@ -142,7 +142,7 @@ class Enum2:
   def __init__(self, **args):
     self.__dict__.update(args)
     self.nameOf = {}
-    for k,v in args.items():
+    for k,v in list(args.items()):
       self.nameOf[v] = k
 
 class Callable:
@@ -164,7 +164,7 @@ def escape_dots(s, translate_nl=1):
     lines = s.split("\r\n")
   if lines and not lines[-1]:
     del lines[-1]
-  for i in xrange(len(lines)):
+  for i in range(len(lines)):
     if lines[i].startswith("."):
       lines[i] = "."+lines[i]
   lines.append(".\r\n")
@@ -173,7 +173,7 @@ def escape_dots(s, translate_nl=1):
 def unescape_dots(s, translate_nl=1):
   lines = s.split("\r\n")
 
-  for i in xrange(len(lines)):
+  for i in range(len(lines)):
     if lines[i].startswith("."):
       lines[i] = lines[i][1:]
 
@@ -234,13 +234,13 @@ class ListenSocket:
       try:
         self.s = socket.socket(af, socktype, proto)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-      except socket.error, msg:
+      except socket.error as msg:
         self.s = None
         continue
       try:
         self.s.bind(sa)
         self.s.listen(1)
-      except socket.error, msg:
+      except socket.error as msg:
         self.s.close()
         self.s = None
         continue
@@ -315,7 +315,7 @@ loglevels = { "DEBUG":  logging.DEBUG,
               "ERROR":  logging.ERROR,
               "NONE":   logging.ERROR + 5 }
 # Set loglevel => name translation.
-for name, value in loglevels.iteritems():
+for name, value in loglevels.items():
   logging.addLevelName(value, name)
 
 def plog_use_logger(name):
