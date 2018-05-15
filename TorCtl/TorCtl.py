@@ -52,6 +52,8 @@ import types
 import time
 import copy
 
+from io import IOBase
+
 from TorUtil import *
 
 if sys.version_info < (2, 5):
@@ -867,7 +869,7 @@ class Connection:
       if len(lines) > 2:
         amsg = "\n".join(lines[:2]) + "\n"
       self._debugFile.write(str(time.time())+"\t>>> "+amsg)
-    self._s.write(msg)
+    self._s.write(msg.encode())
 
   def set_timer(self, in_seconds, type=None):
     event = (("650", "TORCTL_TIMER", type),)
@@ -929,7 +931,7 @@ class Connection:
       elif self._authType == AUTH_TYPE.PASSWORD:
         self.authenticate_password(secret)
       else:
-        authCookie = open(self._cookiePath, "r")
+        authCookie = open(self._cookiePath, "rb")
         self.authenticate_cookie(authCookie)
         authCookie.close()
     except ErrorReply, exc:
@@ -973,10 +975,10 @@ class Connection:
     """
     
     # read contents if provided a file
-    if type(cookie) == file: cookie = cookie.read()
+    if isinstance(cookie, IOBase): cookie = cookie.read()
     
     # unlike passwords the cookie contents isn't enclosed by quotes
-    self.sendAndRecv("AUTHENTICATE %s\r\n" % binascii.b2a_hex(cookie))
+    self.sendAndRecv("AUTHENTICATE %s\r\n" % binascii.b2a_hex(cookie).decode())
 
   def get_option(self, name):
     """Get the value of the configuration option named 'name'.  To
