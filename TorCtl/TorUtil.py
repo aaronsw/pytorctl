@@ -200,7 +200,7 @@ class BufSock:
         return result
 
     while 1:
-      s = self._s.recv(128)
+      s = self._s.recv(128).decode('utf-8')
       if not s: return None
       # XXX: This really does need an exception
       #  raise ConnectionClosed()
